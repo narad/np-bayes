@@ -67,7 +67,7 @@ class Identifier(f: String) {
     itemsT.contains(x)
   
   def example: SegmentType =
-    itemsT.first
+    itemsT.head
 }
 
 
@@ -219,7 +219,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	/**
 	 * Initialize the data and goldBoundaries
 	 */
-	val (data: WordType,goldBoundaries: Array[Boundary]) = {
+	val (data,goldBoundaries) = {
 		var seqPhones = Vector.empty[Int]
 		var seqBoundaries: Vector[Boundary] = Vector.empty:+UBoundaryNodrop
 		def processLine(line: String) = {

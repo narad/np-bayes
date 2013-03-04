@@ -99,7 +99,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	    case UBoundaryDrop | UBoundaryNodrop => data.UBOUNDARYWORD
 	    case _ => data.getWord(data.boundaryToLeft(leftWordStart-1), leftWordStart)._2
 	  }
-	  val (rO,rU: WordType) = boundaries(rightWordEnd) match {
+	  val (rO,rU) = boundaries(rightWordEnd) match {
 	    case UBoundaryDrop | UBoundaryNodrop => (data.UBOUNDARYWORD,data.UBOUNDARYWORD)
 	    case _ => data.getWord(rightWordEnd, data.boundaryToRight(rightWordEnd+1))
 	  }

@@ -30,7 +30,7 @@ import npbayes.wordseg.lexgens.BigramLearned
 abstract class DROPINFERENCEMODE
 case class FIXDROP(val prob: Double) extends DROPINFERENCEMODE
 case class INFERDROP(val dropPrior: Double, val noDropPrior: Double) extends DROPINFERENCEMODE
-case class IGNOREDROP extends DROPINFERENCEMODE
+case object IGNOREDROP extends DROPINFERENCEMODE
 
 
 

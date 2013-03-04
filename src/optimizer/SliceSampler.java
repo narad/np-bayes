@@ -123,7 +123,7 @@ public abstract class SliceSampler
 				}else{
 					break;
 				}
-			}
+			} 
 			w = (4*w + (right1 - left1))/5;  
 		}
 		return x;
