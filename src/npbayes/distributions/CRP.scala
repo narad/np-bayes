@@ -1,9 +1,11 @@
 package npbayes.distributions
 import npbayes.Utils
+import npbayes.wordseg
+
 import scala.collection.mutable.HashMap
 import scala.util.Random
 import scala.collection.mutable.WeakHashMap
- 
+
 
 import scala.collection.mutable.LinkedList
 
@@ -293,13 +295,24 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
     _logProbSeating(concentration, _: Double)
     
   /**
-   * see the Teh tech-report
+   * Sharon's idea (see her and Tom's 2006)
+   * we use a Normal-MH sampling, with mean = alpha, and variance = vratio*alpha, just
+   * like she did but with a proper prior
    * 
    * Gamma(alpha, beta)
    * 
    */
-  def sampleConcentration() = {
-    
+  def sampleConcentrationMH(shape: Double, rate: Double, vratio: Double=0.01) = {
+    val x = concentration
+    val y = truncatedNormalVariate(x, vratio*x, 0)
+    val lq_xy = math.log(truncatedNormal(x, y, vratio*y,0))
+    val lq_yx = math.log(truncatedNormal(y,x,vratio*x,0))
+    val lpi_y = _logProbSeatingByConc(y)+Utils.lgammadistShapeRate(y,wordseg.wordseg.shape,wordseg.wordseg.rate)
+    val lpi_x = _logProbSeatingByConc(x)+Utils.lgammadistShapeRate(x,wordseg.wordseg.shape,wordseg.wordseg.rate)
+    if (_random.nextDouble<((lpi_y+lq_xy)-(lpi_x+lq_yx)))
+      concentration = y
+    else //reject, keep old value
+      concentration = x
   }
     
     
