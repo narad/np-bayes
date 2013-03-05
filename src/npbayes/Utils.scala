@@ -12,7 +12,7 @@ import org.apache.commons.math3.special.Gamma
  * added a toString-method
  */
 class ArgParser(argArray: Array[String]) {
-	
+	val arguments = new HashMap[Any,Any]
 	var args = argArray
 	
 	def contains(str: String): Boolean = args.contains(str)
@@ -26,9 +26,9 @@ class ArgParser(argArray: Array[String]) {
 	def getDouble(arg: String, default: Double): Double = getString(arg, default.toString).toDouble
 	
 	def getString(arg: String): String = getString(arg, null.asInstanceOf[String])	
-	
+		
 	def getString(arg: String, default: String): String = {
-		if (args.contains(arg)) {
+	  if (args.contains(arg)) {
 			return args(args.indexOf(arg)+1)
 		}
 		else {
@@ -37,7 +37,7 @@ class ArgParser(argArray: Array[String]) {
 	}	
 	
 	def getBoolean(arg: String, default: Boolean=false): Boolean = {
-		if (args.contains(arg)) {
+	  if (args.contains(arg)) {
 			return args(args.indexOf(arg)+1).toLowerCase == "true"
 		}
 		else {

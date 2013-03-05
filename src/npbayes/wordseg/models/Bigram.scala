@@ -12,6 +12,9 @@ import optimizer.SliceSampler
 import npbayes.Utils
 import org.apache.commons.math3.random.RandomGenerator
 import java.util.Random
+import optimizer.SliceSampler
+import optimizer.SliceSampler
+import optimizer.SliceSampler
 abstract class BContext
 
 case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: WordType, val w1D: WordType,
@@ -355,43 +358,44 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}
 
 	def resampleConcentration = {
-	  object sampleAlpha0 extends SliceSampler {
-	    def logpdf(alpha: Double, params: Object): Double = {
+      def logpdfUni(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
-	  }
-	  object sampleAlpha1 extends SliceSampler {
-	    def logpdf(alpha: Double, params: Object): Double = {
-	      var result = 0
-	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
-	      var res: Double = 0
-	      for (bCRP <- pypBis.values)
-	        res += bCRP.logProbSeating(alpha)
-	      res + logPrior
-	    } 
-	  }
-	  val alpha0 = sampleAlpha0.sliceSample1D(null, pypUni.concentration, unif, 0.0, Double.PositiveInfinity, pypUni.concentration/32.0, 20, 200)
+      
+      pypUni.concentration = new SliceSampler(logpdfUni,0.0,Double.PositiveInfinity).sliceSample1D(pypUni.concentration, pypUni.concentration/32.0, 20) 
 
-	  /**
+      
+      /**
 	   * either a simple alpha for all bigrams, or one for each bigram
 	   */
-	  
-	  //	  val alpha1 = sampleAlpha1.sliceSample1D(null, pypBis.values.first.concentration, unif, 0.0, Double.PositiveInfinity, pypBis.values.first.concentration/32.0, 20, 200)
-
-	  
-	  pypUni.concentration = alpha0
-	  for (bCRP <- pypBis.values) {
-		  object sampleAlpha1 extends SliceSampler {
-		    def logpdf(alpha: Double, params: Object): Double = {
+      if (wordseg.wordseg.coupled) {
+	      def logpdfBi(alpha: Double): Double = {
+		      var result = 0
+		      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
+		      var res: Double = 0
+		      for (bCRP <- pypBis.values)
+		        res += bCRP.logProbSeating(alpha)
+		      res + logPrior
+		  } 
+	
+	      val oldSharedBigramAlpha = pypBis.head._2.concentration
+	      val newSharedBigramAlpha = new SliceSampler(logpdfBi,0.0,Double.PositiveInfinity).sliceSample1D(oldSharedBigramAlpha,oldSharedBigramAlpha/32.0, 20)
+	      for (bCRP <- pypBis.values) {
+			bCRP.concentration = newSharedBigramAlpha  
+	      }
+      } else {
+        for (bCRP <- pypBis.values) {
+        	def logpdf(alpha: Double): Double = {
 		      var result = 0
 		      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 		     bCRP.logProbSeating(alpha) + logPrior
-		    } 
-		  }
-	    bCRP.concentration = sampleAlpha1.sliceSample1D(null, bCRP.concentration, unif, 0.0, Double.PositiveInfinity, bCRP.concentration/32.0, 20, 200)
-	  }
+		    }
+        	val x = bCRP.concentration
+        	bCRP.concentration = new SliceSampler(logpdf,0.0,Double.PositiveInfinity).sliceSample1D(x,x/32.0,20)
+        }
+      }
 	}	  
 	
 //	def hyperParam: String =
@@ -400,10 +404,13 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	
 	def hyperParam: String = {
 	  var res = "alpha0 "+pypUni.concentration
-	  for (w <- pypBis.keySet) {
-	    val ws = wToS(w)
-	    res += " alpha_"+ws+" "+pypBis(w).concentration
-	  }
+	  if (!wordseg.wordseg.coupled)
+		  for (w <- pypBis.keySet) {
+		    val ws = wToS(w)
+		    res += " alpha_"+ws+" "+pypBis(w).concentration
+		  }
+	  else
+	    res += " alpha1 "+pypBis.head._2.concentration
 //	  "alpha0 "+pypUni.concentration+" alpha1 "+pypBis.values.first.concentration
 	  res
 	}
@@ -420,9 +427,20 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	    	assert(pypW.sanityCheck)
 	    lp3 += pypW.logProbSeating(alpha1)
 	  }
+	  val lp4 = if (wordseg.wordseg.hyperparam)
+	    if (wordseg.wordseg.coupled)
+	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)+
+	      Utils.lgammadistShapeRate(pypBis.head._2.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	    else
+	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)+
+	      {for (bCRP <- pypBis.values)
+	        yield Utils.lgammadistShapeRate(bCRP.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      }.toList.sum
+	  else
+	    0
 	  if (wordseg.DEBUG)
-		  println("lp1: "+lp1+"\nlp2: "+lp2+"\nlp3:" +lp3)
-	  lp1 + lp2 + lp3 + data.delModelProb
+		  println("lp1: "+lp1+"\nlp2: "+lp2+"\nlp3:" +lp3+"\nlp4:"+lp4+"\nlp5:"+data.delModelProb)
+	  lp1 + lp2 + lp3 + lp4+data.delModelProb
 	}
 	
 	def logProb: Double = { 

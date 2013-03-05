@@ -64,6 +64,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def CONTEXTMODEL = getString("--context","no")
 	def DELAYRECOVERY = getBoolean("--delayRecovery",true)  //if set to true, no recovery during annealing
 	def HYPERPARAM = getBoolean("--hyper",false)
+	def COUPLED = getBoolean("--coupled",false)
 	def SHAPE = getDouble("--shape",0.1)
 	def RATE = getDouble("--shape",0.1)
 }
@@ -78,6 +79,7 @@ object wordseg {
     var shape: Double = 0.1
     var rate: Double = 0.1
     var hyperparam: Boolean = false
+    var coupled: Boolean = false
     
     
 	def main(args: Array[String]) = {
@@ -93,6 +95,7 @@ object wordseg {
 	      throw new Error(options.ASSUMPTION+ " is invalid value for --asumption: either EXACT, MINPATH or MAXPATH")
 	  }
 	
+	  
 	isConsonant = new Identifier(options.CONSLIST)
  	isVowel = new Identifier(options.VOWELLIST)
 	isPause = new Identifier(options.SILLIST)
@@ -115,6 +118,7 @@ object wordseg {
 	  shape = options.SHAPE
 	  rate = options.RATE
 	  hyperparam = options.HYPERPARAM
+	  coupled = options.COUPLED	  
 	  data = new VarData(options.INPUT,options.DROPPROB,options.DROPIND,options.DROPSEG,contextModel)
 	  
 	  val lexgen: PosteriorPredictive[WordType] = options.LEXGEN match {

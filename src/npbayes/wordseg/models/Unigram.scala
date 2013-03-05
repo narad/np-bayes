@@ -175,14 +175,12 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
    def hyperParam: String = "alpha0 "+pypUni.concentration
    
    def resampleConcentration = {
-	  object sampleAlpha0 extends SliceSampler {
-	    def logpdf(alpha: Double, params: Object): Double = {
+      def logpdf(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
-	  }
-	  val alpha0 = sampleAlpha0.sliceSample1D(null, pypUni.concentration, unif, 0.0, Double.PositiveInfinity, pypUni.concentration/32.0, 20, 200)
+      val alpha0 = new SliceSampler(logpdf,0.0,Double.PositiveInfinity).sliceSample1D(pypUni.concentration, pypUni.concentration/32.0, 20)      
 	  pypUni.concentration = alpha0 
 	}	  
 	
@@ -430,7 +428,12 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	def logProb: Double = {
 	  if (npbayes.wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
-	  pypUni.logProb + data.delModelProb
+	  pypUni.logProb + data.delModelProb + {
+	    if (wordseg.wordseg.hyperparam)
+	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	    else
+	      0
+	  }
 	} 
 
 }
