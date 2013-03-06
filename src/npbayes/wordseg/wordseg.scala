@@ -77,7 +77,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 }
 
 object wordseg {
-    var dropInferenceMode: ScalaObject = null
+    var dropInferenceMode: ScalaObject = IGNOREDROP
     var isConsonant: Identifier = null
     var isVowel: Identifier = null
     var isPause: Identifier = null

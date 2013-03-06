@@ -17,6 +17,7 @@ import npbayes.LexGenerator
 import npbayes.UNIUNLEARNED
 import npbayes.UNILEARNED
 import npbayes.UNILEARNEDVOWELS
+import org.apache.commons.math3.special.Gamma
 
 
 
@@ -456,20 +457,22 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  var spos=sentence._1
 	  var isFinal = false
 	  while (!isFinal) {
-	    val epos = data.boundaryToRight(spos)
+	    val epos = data.boundaryToRight(spos+1)
 	    isFinal = data.boundaries(epos) match {
 	      case UBoundaryDrop | UBoundaryNodrop => true
 	      case _ => false
 	    }
 	    val (wO,wU) = data.getWord(spos,epos)
-	    remove(wU)
+	    println(spos+" "+epos+"="+wO)
+	    lprob+=math.log(remove(wU))
 	    if (!isFinal) {
-	      lprob += (1-_predBoundary()) 
+	      lprob += math.log(1-_predBoundary()) 
 	    }
+	    spos = epos
 	  }
-	  lprob+=_predBoundary()
 	  nUtterances-=1
-	  (Vector.empty[Boundary].++(data.boundaries.view(sentence._1, sentence._2)),lprob)
+	  lprob+=math.log(_predBoundary())
+	  (Vector.empty[Boundary].++(data.boundaries.view(sentence._1+1, sentence._2+1)),lprob)
 	}
 	
 	def mhsResample(sentence:(Int,Int)) = {
@@ -486,6 +489,9 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	
 	
 	def logProb: Double = {
+	  val nonFinal = nTokens - nUtterances
+	  val lpBoundaries = Gamma.logGamma(nonFinal+betaUB/2.0)+Gamma.logGamma(nUtterances+betaUB/2.0)+Gamma.logGamma(betaUB)-
+	  						2*Gamma.logGamma(betaUB/2.0)-Gamma.logGamma(nTokens+betaUB)
 	  if (npbayes.wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
 	  pypUni.logProb + data.delModelProb + {
@@ -493,7 +499,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	    else
 	      0
-	  }
+	  } + lpBoundaries
 	} 
 
 }
