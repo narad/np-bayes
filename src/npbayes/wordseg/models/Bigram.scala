@@ -15,16 +15,16 @@ import java.util.Random
 import optimizer.SliceSampler
 import optimizer.SliceSampler
 import optimizer.SliceSampler
+import npbayes.LexGenerator
+import npbayes.BIUNLEARNED
+import npbayes.BILEARNEDVOWELS
+import npbayes.BILEARNED
 abstract class BContext
 
 case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: WordType, val w1D: WordType,
 					  val w2O: WordType, val w2U: WordType,
 					  val w1w2O: WordType, val w1w2U: WordType,
-					  val rightO: WordType, val rightU: WordType) extends BContext {
-  override def toString = {
-    wToS(leftU)+","+wToS(w1O)+","+wToS(w2O)+","+wToS(rightU)
-  }
-}
+					  val rightO: WordType, val rightU: WordType) extends BContext 
 
 case class BigramFinalContext(val leftU: WordType, val wO: WordType, val wU: WordType, val wD: WordType) extends BContext					  
 
@@ -34,15 +34,26 @@ object Bigram {
 
 class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double=0,concentrationBi: Double, discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
     		  val dropSeg: String = "KLRK", val dropInd: String = "KLRK",val dropProb: Double = 0.0,
-    		  val contextModel: DeletionModel, val lexgen: PosteriorPredictive[WordType]) extends WordsegModel {
+    		  val contextModel: DeletionModel, val lexgen: LexGenerator) extends WordsegModel {
+  //val lexgen: PosteriorPredictive[WordType]) extends WordsegModel {
 	require(0<=discountUni && discountUni<1)
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	
 	val unif= new Random
 	val data = new VarData(corpusName,dropProb,dropInd,dropSeg,contextModel)
-	val pypUni = 
-    //new CRP[WordType](concentrationUni,discountUni,new MonkeyBigram(SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5),assumption)
-    new CRP[WordType](concentrationUni,discountUni,lexgen,assumption)    
+	val pypUni = { 
+		val tlexgen = lexgen match {
+		  case BIUNLEARNED =>
+	    	    new MonkeyBigram(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5)
+		  case BILEARNEDVOWELS =>
+	    	    new BigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,data.UBOUNDARYWORD,0.5,0.1,true)		    
+		  case BILEARNED =>
+	          new BigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,data.UBOUNDARYWORD,0.5,0.1,false)
+		  case _ =>
+		    throw new Error("Invalid value for lexgen:"+lexgen)
+	      }
+		new CRP[WordType](concentrationUni,discountUni,tlexgen,assumption)
+	}
 	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
  
 
@@ -404,7 +415,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	
 	def hyperParam: String = {
 	  var res = "alpha0 "+pypUni.concentration
-	  if (!wordseg.wordseg.coupled)
+	  if (false)//(!wordseg.wordseg.coupled)
 		  for (w <- pypBis.keySet) {
 		    val ws = wToS(w)
 		    res += " alpha_"+ws+" "+pypBis(w).concentration

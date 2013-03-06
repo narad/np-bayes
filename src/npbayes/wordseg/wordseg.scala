@@ -18,6 +18,13 @@ import npbayes.wordseg.lexgens.MonkeyBigram
 import npbayes.wordseg.lexgens.MonkeyBigram
 import npbayes.wordseg.lexgens.UnigramLearned
 import npbayes.wordseg.lexgens.BigramLearned
+import npbayes.LexGenerator
+import npbayes.BIUNLEARNED
+import npbayes.BILEARNEDVOWELS
+import npbayes.BILEARNED
+import npbayes.UNILEARNEDVOWELS
+import npbayes.UNILEARNED
+import npbayes.UNIUNLEARNED
 
 
 /**
@@ -74,7 +81,7 @@ object wordseg {
     var isConsonant: Identifier = null
     var isVowel: Identifier = null
     var isPause: Identifier = null
-    var data: VarData = null
+//    var data: VarData = null
     var isAnnealing: Boolean = false //so we can check whether we are still annealing or not
     var shape: Double = 0.1
     var rate: Double = 0.1
@@ -119,29 +126,29 @@ object wordseg {
 	  rate = options.RATE
 	  hyperparam = options.HYPERPARAM
 	  coupled = options.COUPLED	  
-	  data = new VarData(options.INPUT,options.DROPPROB,options.DROPIND,options.DROPSEG,contextModel)
+//	  data = new VarData(options.INPUT,options.DROPPROB,options.DROPIND,options.DROPSEG,contextModel)
 	  
-	  val lexgen: PosteriorPredictive[WordType] = options.LEXGEN match {
+	  val lexgen: LexGenerator = options.LEXGEN match {
 	    case "monkey" =>
 	    	options.NGRAM match {
 	    	  case "1" =>
-	    	    new MonkeyUnigram(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.5)
+	    	    UNIUNLEARNED
 	    	  case "2" =>
-	    	    new MonkeyBigram(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5)
+	    	    BIUNLEARNED
 	    	}
 	    case "learn" =>
 	      options.NGRAM match {
 	        case "1" =>
-	          new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1)
+	         UNILEARNED
 	        case "2" =>
-	          new BigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,data.UBOUNDARYWORD,0.5,0.1,false)
+	          BILEARNED
 	      }
 	    case "vowel" =>
 	      options.NGRAM match {
 	        case "1" =>
-	          new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1)
+	          UNILEARNEDVOWELS
 	        case "2" =>
-	          new BigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,data.UBOUNDARYWORD,0.5,0.1,true)
+	          BILEARNEDVOWELS
 	      }
 	  } 
 	  

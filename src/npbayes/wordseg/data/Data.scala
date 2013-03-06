@@ -19,20 +19,7 @@ import org.apache.commons.math3.special.Gamma
 import npbayes.wordseg.IGNOREDROP
 import npbayes.wordseg.FIXDROP
 import npbayes.wordseg.INFERDROP
-import npbayes.wordseg.IGNOREDROP
-import npbayes.wordseg.FIXDROP
-import npbayes.wordseg.IGNOREDROP
-import npbayes.wordseg.FIXDROP
-import npbayes.wordseg.INFERDROP
-import npbayes.wordseg.IGNOREDROP
-import npbayes.wordseg.INFERDROP
-import npbayes.wordseg.FIXDROP
-import npbayes.wordseg.INFERDROP
-import npbayes.wordseg.FIXDROP
-import npbayes.wordseg.IGNOREDROP
-import npbayes.wordseg.IGNOREDROP
-import npbayes.wordseg.IGNOREDROP
-import npbayes.wordseg.INFERDROP
+import scala.collection.mutable.ArrayBuffer
 
 
 
@@ -89,6 +76,14 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	val deleted: HashMap[RuleContext,Int] = new HashMap
 	val realized: HashMap[RuleContext,Int] = new HashMap
 	
+	val sentences: ArrayBuffer[(Int,Int)] = new ArrayBuffer
+	/**
+	 * (x,y) refers to a sentence spanning the characters from
+	 * x to y (exclusive, hence substr(x,y)
+	 * it is bounded by the boundaries with index x (to the left, not
+	 * affected by resampling) and y, hence use
+	 * x+1 as the offset
+	 */
 	
     val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
 	val UBOUNDARYWORD=segToWord(SymbolTable(UBOUNDARYSYMBOL))
@@ -215,6 +210,11 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  }
 	}	
 	  	  
+	/**
+	 * @return	length of the sentence (= number of boundaries)
+	 */
+	def getSentenceLength(x:(Int, Int)): Int =
+	  x._2-x._1
 	
 	/**
 	 * Initialize the data and goldBoundaries
@@ -222,11 +222,14 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	val (data,goldBoundaries) = {
 		var seqPhones = Vector.empty[Int]
 		var seqBoundaries: Vector[Boundary] = Vector.empty:+UBoundaryNodrop
+		var startPos = 0
+		var stringPos = 0
 		def processLine(line: String) = {
 			for (w <- line.stripLineEnd.split("\t")) {
 				for (c: String <- w.split(" ")) {
 				seqPhones = seqPhones:+ SymbolTable(c)
 					seqBoundaries = seqBoundaries:+NoBoundary
+					stringPos+=1
 				}
 	      // adjust for word-boundaries --- last NoBoundary is in fact a word-boundary
 				if (SymbolTable(seqPhones.last)==MISSING) {
@@ -239,7 +242,9 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 			seqBoundaries = seqBoundaries.last match {
 				case WBoundaryDrop => seqBoundaries.dropRight(1):+UBoundaryDrop
 				case WBoundaryNodrop => seqBoundaries.dropRight(1):+UBoundaryNodrop
-			}	    
+			}
+			sentences+=((startPos,stringPos))
+			startPos=stringPos
 		}
 		for (l <- Source.fromFile(fName).getLines) processLine(l)
 		val phones = new Builder[Int]
@@ -439,7 +444,15 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 
 	def boundaryToLeft: (Int=>Int) = _findBoundary(_-1)
 	def boundaryToRight: (Int=>Int) = _findBoundary(_+1)
+	
+	def boundaryToRightSentence(x: (Int,Int)): (Int=>Int) = _findBoundary(_+1+x._1)
 
+	def getWordWithVarSentence(sPos: Int, ePos: Int,s: (Int,Int)): (WordType,WordType,WordType) = {
+	  val offset = s._1+1
+	  getWordWithVar(offset+sPos,offset+ePos)
+	}
+
+	
 	/**
 	 * returns a triple (observed,underlying,withDrop)
 	 */
@@ -453,6 +466,13 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	      (word,word,wD)
 	  }
 	}
+	
+	
+	def getWordSentence(sPos: Int, ePos: Int,s: (Int,Int)): (WordType,WordType) = {
+	  val offset = s._1+1
+	  getWord(offset+sPos,offset+ePos)
+	}
+	  
 	
 	/**
 	 * returns a tuple (observed,underlying)

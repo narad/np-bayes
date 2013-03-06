@@ -13,6 +13,10 @@ import npbayes.wordseg.IGNOREDROP
 import optimizer.SliceSampler
 import npbayes.Utils
 import java.util.Random
+import npbayes.LexGenerator
+import npbayes.UNIUNLEARNED
+import npbayes.UNILEARNED
+import npbayes.UNILEARNEDVOWELS
 
 
 
@@ -34,14 +38,26 @@ case class UnigramFinalContext(val wO: WordType, val wU: WordType, val wD: WordT
 					  
 
 class Unigram(val corpusName: String,concentration: Double,discount: Double=0,val pWB: Double = 0.5, val assumption: HEURISTIC = EXACT,val dropSeg: String = "KLRK", val dropInd: String = "KLRK", val dropProb: Double =0.0,
-				val contextModel: DeletionModel, val lexgen: PosteriorPredictive[WordType]) extends WordsegModel {
+				val contextModel: DeletionModel, val lexgen: LexGenerator) extends WordsegModel {
 	require(0<=discount && discount<1)
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0
 	val data = new VarData(corpusName,dropProb,dropInd,dropSeg,contextModel)
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
 	//val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
-	val pypUni = new CRP[WordType](concentration,discount,lexgen,assumption)	
+	val pypUni = {
+	  val tlexgen = lexgen match {
+	    case UNIUNLEARNED =>
+	    	new MonkeyUnigram(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.5)
+	    case UNILEARNED =>
+	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1)
+	    case UNILEARNEDVOWELS =>
+	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1)
+	    case _ =>
+	      throw new Error("invalid value for lexgen: "+lexgen)
+	  }
+	  new CRP[WordType](concentration,discount,tlexgen,assumption)	
+	}
 	
 	val unif = new Random
 	
@@ -132,7 +148,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      	case WBoundaryDrop | WBoundaryNodrop => {
 	      	  val context = medialContext(cPos)
 	      	 toSurface(context.w1U,context.w1O,context.w2U)
- 	      	  _logProbTrack+=math.log(update(context.w1U)*toSurface(context.w1U,context.w1O,context.w2U))
+ 	      	  //_logProbTrack+=math.log(update(context.w1U)*toSurface(context.w1U,context.w1O,context.w2U))
+	      	 update(context.w1U)
  	      	  SymbolTable(context.w1U.get(context.w1U.size-1)) match {
  	      	  	case data.DROPSYMBOL =>
  	      	  	  if (context.w1O==context.w1U) //no drop has taken place
@@ -145,7 +162,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      	}
 	      	case UBoundaryDrop | UBoundaryNodrop => {
 	      	  val context = finalContext(cPos)
-	      	  _logProbTrack+=math.log(update(context.wU)*toSurface(context.wU,context.wO,data.UBOUNDARYWORD))
+	      	  //_logProbTrack+=math.log(update(context.wU)*toSurface(context.wU,context.wO,data.UBOUNDARYWORD))
+	      	  update(context.wU)
  	      	  SymbolTable(context.wU.get(context.wU.size-1)) match {
  	      	  	case data.DROPSYMBOL =>
  	      	  	  if (context.wO==context.wU) //no drop has taken place
@@ -301,16 +319,21 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      	val isFinal = rU==data.UBOUNDARYWORD 
 	    	b match {
 	    	  case NoBoundary => 
-	    	    _logProbTrack+=math.log(update(w1w2U)*toSurface(w1w2U,w1w2O,rU))
+	    	    //_logProbTrack+=math.log(update(w1w2U)*toSurface(w1w2U,w1w2O,rU))
+	    	    update(w1w2U)
 	    	  case WBoundaryDrop => 
-	    	    _logProbTrack+=math.log(update(w1D)*toSurface(w1D,w1O,rU))
+	    	    //_logProbTrack+=math.log(update(w1D)*toSurface(w1D,w1O,rU))
+	    	    update(w1D)
 	    	    data.addDrop(w1D.get(w1D.size-2),w2O.get(0))
-	    	    _logProbTrack+=math.log(update(w2U)*toSurface(w2U,w2O,rU))
+	    	    //_logProbTrack+=math.log(update(w2U)*toSurface(w2U,w2O,rU))
+	    	    update(w2U)
 	    	  case WBoundaryNodrop =>
 //	    	    print(" -->("+w1O+") ")
-	    	    _logProbTrack+=math.log(update(w1O)*toSurface(w1O,w1O,rU))
+//	    	    _logProbTrack+=math.log(update(w1O)*toSurface(w1O,w1O,rU))
+	    	    update(w1O)
 //	    	    print(pypUni.logProb+" "+_logProbTrack+" -->("+w2U+") ")
-	    	    _logProbTrack+=math.log(update(w2U)*toSurface(w2U,w2O,rU))  
+//	    	    _logProbTrack+=math.log(update(w2U)*toSurface(w2U,w2O,rU))
+	    	    update(w2U)
 	    	    if (w1O.get(w1O.size()-1)==data.DROPSEG && w1O.size>1)
 	    	    	data.addNodrop(w1O.get(w1O.size-2),w2O.get(0))	    	
 //	    	    print(pypUni.logProb+" "+_logProbTrack)
@@ -319,19 +342,18 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    case UnigramFinalContext(w1O,w1U,w1D) =>
 	      b match {
 	        case UBoundaryDrop =>
-	          _logProbTrack+=math.log(update(w1D)*toSurface(w1D,w1O,data.UBOUNDARYWORD))
+//	          _logProbTrack+=math.log(update(w1D)*toSurface(w1D,w1O,data.UBOUNDARYWORD))
+	          update(w1D)
 	          data.addDrop(w1D.get(w1D.size-2),data.UBOUNDARYWORD.get(0))	          
 	        case UBoundaryNodrop =>
-	          _logProbTrack+=math.log(update(w1O)*toSurface(w1O,w1O,data.UBOUNDARYWORD))
+//	          _logProbTrack+=math.log(update(w1O)*toSurface(w1O,w1O,data.UBOUNDARYWORD))
+	          update(w1O)
 	    	  if (w1O.get(w1O.size()-1)==data.DROPSEG && w1O.size>1)      
 	    		   data.addNodrop(w1O.get(w1O.size-2),data.UBOUNDARYWORD.get(0))	          
 	      }
 	  }
 	  if (wordseg.DEBUG) {
 		  assert(pypUni.sanityCheck)
-		  if ((_logProbTrack-logProb).abs>0.0001) {
-		    val sdfsdf=3
-		  }
 	  }
 //      print("]")
 	}
@@ -348,10 +370,13 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      } else if (w1O.get(w1O.size()-1)==data.DROPSEG && w1O.size>1) {
 	        data.removeNodrop(w1O.get(w1O.size-2),w2O.get(0))
 	      }	        	      
-	      _logProbTrack-=math.log(remove(w1U)*toSurface(w1U,w1O,rU))
-	      _logProbTrack-=math.log(remove(w2U)*toSurface(w2U,w2O,rU))	      
+	      //_logProbTrack-=math.log(remove(w1U)*toSurface(w1U,w1O,rU))
+	      remove(w1U)
+	      remove(w2U)
+	      //_logProbTrack-=math.log(remove(w2U)*toSurface(w2U,w2O,rU))	      
 	    } else
-	        _logProbTrack-=math.log(remove(w1w2U)*toSurface(w1w2U,w1w2O,rU))
+	    	remove(w1w2U)
+	        //_logProbTrack-=math.log(remove(w1w2U)*toSurface(w1w2U,w1w2O,rU))
 	  case UnigramFinalContext(w1O,w1U,w1D) =>
 	    if (boundary==UBoundaryDrop) {
 	      data.removeDrop(w1D.get(w1D.size-2),data.UBOUNDARYWORD.get(0))
@@ -359,7 +384,8 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      if (w1O.get(w1O.size()-1)==data.DROPSEG && w1O.size>1)
 	        data.removeNodrop(w1O.get(w1O.size-2),data.UBOUNDARYWORD.get(0))
 	    }
-	    _logProbTrack-=math.log(remove(w1U)*toSurface(w1U,w1O,data.UBOUNDARYWORD))	    
+	    //_logProbTrack-=math.log(remove(w1U)*toSurface(w1U,w1O,data.UBOUNDARYWORD))
+	    remove(w1U)
 	  }
 	  if (wordseg.DEBUG) {
 		  assert(pypUni.sanityCheck)
@@ -424,6 +450,40 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  }
 	  logProb
 	}
+	
+	def removeSentence(sentence:(Int,Int)): (Vector[Boundary],Double) = {
+	  var lprob = 0.0
+	  var spos=sentence._1
+	  var isFinal = false
+	  while (!isFinal) {
+	    val epos = data.boundaryToRight(spos)
+	    isFinal = data.boundaries(epos) match {
+	      case UBoundaryDrop | UBoundaryNodrop => true
+	      case _ => false
+	    }
+	    val (wO,wU) = data.getWord(spos,epos)
+	    remove(wU)
+	    if (!isFinal) {
+	      lprob += (1-_predBoundary()) 
+	    }
+	  }
+	  lprob+=_predBoundary()
+	  nUtterances-=1
+	  (Vector.empty[Boundary].++(data.boundaries.view(sentence._1, sentence._2)),lprob)
+	}
+	
+	def mhsResample(sentence:(Int,Int)) = {
+	  val length = data.getSentenceLength(sentence)
+	  val trellis = new Array[(Int,Double)](length)
+	  val (oldSeg,oldSegLP) = removeSentence(sentence)
+	  //trellis[x] stores the highest probability of any segmentation of the string of length x
+	  //and the start-position of its last word as a backpointer
+//	  trellis[0] = (-1,pypUni(data.getWordSentence
+//	  for (bpos <- 1 to length) {
+	    
+	  }
+	  
+	
 	
 	def logProb: Double = {
 	  if (npbayes.wordseg.DEBUG)
