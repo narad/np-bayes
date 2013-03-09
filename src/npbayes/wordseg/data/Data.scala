@@ -30,10 +30,18 @@ case object CVPLeftRight extends DeletionModel
 
 abstract class Boundary
 case object NoBoundary extends Boundary
-case object WBoundaryDrop extends Boundary
-case object WBoundaryNodrop extends Boundary
-case object UBoundaryDrop extends Boundary
-case object UBoundaryNodrop extends Boundary
+case object WBoundaryDrop1 extends Boundary
+case object WBoundaryNoDrop1 extends Boundary
+case object WBoundaryDrop2 extends Boundary
+case object WBoundaryNoDrop2 extends Boundary
+case object WBoundaryNoRule extends Boundary
+case object UBoundaryDrop1 extends Boundary
+case object UBoundaryNoDrop1 extends Boundary
+case object UBoundaryDrop2 extends Boundary
+case object UBoundaryNoDrop2 extends Boundary
+case object UBoundaryNoRule extends Boundary
+
+
 
 abstract class RuleContext
 
@@ -69,12 +77,16 @@ class Identifier(f: String) {
  * variable data --- allows for dropping a single segment at the end of a word
  * keeps boundary information and provides word-extraction functionality
  */
-class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*", val DROPSYMBOL: String = "T", val delModeLType: DeletionModel = GlobalFix) {
+class VarData(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*", val DROP1: String = "T", val MISSING2: String="DROPD", val DROP2: String = "D", val delModeLType: DeletionModel = GlobalFix) {
 	//betaprior counts
-	var nDropped = 0
-	var nNotDropped = 0
-	val deleted: HashMap[RuleContext,Int] = new HashMap
-	val realized: HashMap[RuleContext,Int] = new HashMap
+	var nD1 = 0
+	var nNotD1 = 0
+	var nD2 = 0
+	var nNotD2 = 0
+	val deleted1: HashMap[RuleContext,Int] = new HashMap
+	val realized1: HashMap[RuleContext,Int] = new HashMap
+	val deleted2: HashMap[RuleContext,Int] = new HashMap
+	val realized2: HashMap[RuleContext,Int] = new HashMap
 	
 	val sentences: ArrayBuffer[(Int,Int)] = new ArrayBuffer
 	/**
@@ -87,7 +99,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	
     val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
 	val UBOUNDARYWORD=segToWord(SymbolTable(UBOUNDARYSYMBOL))
-	val DROPSEG=SymbolTable(DROPSYMBOL)
+	val DROPSEG=SymbolTable(DROP1)
 	
 	def isConsonant = wordseg.wordseg.isConsonant
 	def isVowel = wordseg.wordseg.isVowel
@@ -108,34 +120,34 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  else
 	    throw new Error("Error in segmentToType...")
 	
-	def addDrop(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nDropped+=1
+	def addDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nD1+=1
 	  wordseg.wordseg.dropInferenceMode match {
 	    case INFERDROP(_,_) =>
 	    	delModeLType match {
 		    case CVPFollows =>
-		      deleted.put(SimpleRContext(segmentToType(rSegment)),
-				  		deleted.getOrElse(SimpleRContext(segmentToType(rSegment)),0)+1)
+		      deleted1.put(SimpleRContext(segmentToType(rSegment)),
+				  		deleted1.getOrElse(SimpleRContext(segmentToType(rSegment)),0)+1)
 		    case CVPLeftRight =>
-		      deleted.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
-				  		deleted.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
+		      deleted1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
+				  		deleted1.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
 		    case _ =>			  		
 	    	}
 	    case _ =>
 	  }
 	}
 
-	def addNodrop(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nNotDropped += 1
+	def addNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nNotD1 += 1
 	  wordseg.wordseg.dropInferenceMode match {
 	    case INFERDROP(_,_) =>
 	    	delModeLType match {
 	    		case CVPFollows =>
-	    			realized.put(SimpleRContext(segmentToType(rSegment)),
-	    					realized.getOrElse(SimpleRContext(segmentToType(rSegment)), 0)+1)
+	    			realized1.put(SimpleRContext(segmentToType(rSegment)),
+	    					realized1.getOrElse(SimpleRContext(segmentToType(rSegment)), 0)+1)
 	    		case CVPLeftRight =>
-	    			realized.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
-	    					realized.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
+	    			realized1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
+	    					realized1.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
 	    		case _ =>
 	      
 	    	}
@@ -143,30 +155,30 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  }
 	}
 
-	def removeDrop(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nDropped -= 1
+	def removeDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nD1 -= 1
 	  wordseg.wordseg.dropInferenceMode match {
 	    case INFERDROP(_,_) =>
 		  delModeLType match {
 		    case CVPFollows =>
-		      val old = deleted.get(SimpleRContext(segmentToType(rSegment)))
+		      val old = deleted1.get(SimpleRContext(segmentToType(rSegment)))
 			  old match {
 			    case Some(x) =>
 			      if (x-1==0)
-			        deleted.remove(SimpleRContext(segmentToType(rSegment)))
+			        deleted1.remove(SimpleRContext(segmentToType(rSegment)))
 			      else
-			        deleted.put(SimpleRContext(segmentToType(rSegment)),x-1)
+			        deleted1.put(SimpleRContext(segmentToType(rSegment)),x-1)
 			    case None =>
 			      throw new Error("In removeDrop("+rSegment+")")
 			  }
 		    case CVPLeftRight =>
-		      val old = deleted.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+		      val old = deleted1.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
 			  old match {
 			    case Some(x) =>
 			      if (x-1==0)
-			        deleted.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+			        deleted1.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
 			      else
-			        deleted.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
+			        deleted1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
 			    case None =>
 			      throw new Error("In removeDrop("+lSegment+","+rSegment+")")
 			  	      
@@ -177,30 +189,30 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  }     
 	}
 	
-	def removeNodrop(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nNotDropped -= 1
+	def removeNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nNotD1 -= 1
 	  wordseg.wordseg.dropInferenceMode match {
 	    case INFERDROP(_,_) =>
 		  delModeLType match {
 		    case CVPFollows =>
-		      val old = realized.get(SimpleRContext(segmentToType(rSegment)))
+		      val old = realized1.get(SimpleRContext(segmentToType(rSegment)))
 			  old match {
 			    case Some(x) =>
 			      if (x-1==0)
-			        realized.remove(SimpleRContext(segmentToType(rSegment)))
+			        realized1.remove(SimpleRContext(segmentToType(rSegment)))
 			      else
-			    	realized.put(SimpleRContext(segmentToType(rSegment)),x-1)
+			    	realized1.put(SimpleRContext(segmentToType(rSegment)),x-1)
 			    case None =>
 			      throw new Error("In removeDrop("+rSegment+")")
 			  }
 		    case CVPLeftRight =>
-		      val old = realized.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+		      val old = realized1.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
 			  old match {
 			    case Some(x) =>
 			      if (x-1==0)
-			        realized.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+			        realized1.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
 			      else
-			    	realized.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
+			    	realized1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
 			    case None =>
 			      throw new Error("In removeDrop("+lSegment+","+rSegment+")")
 			  }
@@ -209,7 +221,45 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	    case _ =>
 	  }
 	}	
-	  	  
+
+	/**
+	 * takes care of the counts for rule applications
+	 * we can recover trivially
+	 * if underlying ends in t and differs from observed in length --> dropped t
+	 * if underlying ends in t and doesn't differ in length --> realization of t
+	 * if underlying ends in d and differs --> dropped d
+	 * if underlying endsin d and doesn't differ --> realization of d
+	 */
+	def removeTransformation(observed: WordType, underlying: WordType,rightContext: WordType) = {
+	  val uEndsIn = SymbolTable(underlying.get(underlying.size()-1))
+	  val sameLength = observed.size == underlying.size
+	  if (underlying.size>1)
+		  uEndsIn match {
+		    case DROP1 =>
+		      if (sameLength)
+		        removeNoDrop1(underlying.get(underlying.size()-2), rightContext.get(0))
+		      else
+		        removeDrop1(underlying.get(underlying.size()-2),rightContext.get(0))
+		    case DROP2 =>
+		    case _ =>
+		  }
+	}
+	def addTransformation(observed: WordType, underlying: WordType,rightContext: WordType) = {
+	  val uEndsIn = SymbolTable(underlying.get(underlying.size()-1))
+	  val sameLength = observed.size == underlying.size
+	  if (underlying.size>1)
+		  uEndsIn match {
+		    case DROP1 =>
+		      if (sameLength)
+		        addNoDrop1(underlying.get(underlying.size()-2), rightContext.get(0))
+		      else
+		        addDrop1(underlying.get(underlying.size()-2),rightContext.get(0))
+		    case DROP2 =>
+		    case _ =>
+		  }
+	}
+	
+	
 	/**
 	 * @return	length of the sentence (= number of boundaries)
 	 */
@@ -221,7 +271,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	 */
 	val (data,goldBoundaries) = {
 		var seqPhones = Vector.empty[Int]
-		var seqBoundaries: Vector[Boundary] = Vector.empty:+UBoundaryNodrop
+		var seqBoundaries: Vector[Boundary] = Vector.empty:+UBoundaryNoDrop1
 		var startPos = 0
 		var stringPos = 0
 		def processLine(line: String) = {
@@ -232,16 +282,16 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 					stringPos+=1
 				}
 	      // adjust for word-boundaries --- last NoBoundary is in fact a word-boundary
-				if (SymbolTable(seqPhones.last)==MISSING) {
+				if (SymbolTable(seqPhones.last)==MISSING1) {
 					seqPhones = seqPhones.dropRight(1)
-					seqBoundaries = seqBoundaries.dropRight(2):+WBoundaryDrop
+					seqBoundaries = seqBoundaries.dropRight(2):+WBoundaryDrop1
 				} else {
-					seqBoundaries = seqBoundaries.dropRight(1):+WBoundaryNodrop
+					seqBoundaries = seqBoundaries.dropRight(1):+WBoundaryNoDrop1
 				}
 			}
 			seqBoundaries = seqBoundaries.last match {
-				case WBoundaryDrop => seqBoundaries.dropRight(1):+UBoundaryDrop
-				case WBoundaryNodrop => seqBoundaries.dropRight(1):+UBoundaryNodrop
+				case WBoundaryDrop1 => seqBoundaries.dropRight(1):+UBoundaryDrop1
+				case WBoundaryNoDrop1 => seqBoundaries.dropRight(1):+UBoundaryNoDrop1
 			}
 			sentences+=((startPos,stringPos))
 			startPos=stringPos
@@ -268,8 +318,8 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		var seqBoundaries: Vector[Boundary] = Vector.empty
 		for (b <- goldBoundaries) {
 			b match {
-			case UBoundaryDrop | UBoundaryNodrop => seqBoundaries=seqBoundaries:+{if (_random.nextDouble<0) UBoundaryDrop else UBoundaryNodrop}
-			case WBoundaryDrop | WBoundaryNodrop | NoBoundary => seqBoundaries=seqBoundaries:+{if (_random.nextDouble>boundProb) NoBoundary else if (_random.nextDouble<dropProb) WBoundaryDrop else WBoundaryNodrop}
+			case UBoundaryDrop1 | UBoundaryNoDrop1 => seqBoundaries=seqBoundaries:+{if (_random.nextDouble<0) UBoundaryDrop1 else UBoundaryNoDrop1}
+			case WBoundaryDrop1 | WBoundaryNoDrop1 | NoBoundary => seqBoundaries=seqBoundaries:+{if (_random.nextDouble>boundProb) NoBoundary else if (_random.nextDouble<dropProb) WBoundaryDrop1 else WBoundaryNoDrop1}
 			}
 		}
 		seqBoundaries
@@ -290,15 +340,15 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  case FIXDROP(p) =>
 	    p
 	  case INFERDROP(priorDrop,priorNodrop) =>
-	    (nDropped+priorDrop) / (priorDrop+priorNodrop+nDropped+nNotDropped)
+	    (nD1+priorDrop) / (priorDrop+priorNodrop+nD1+nNotD1)
 	}
 
 		def dropProbRContext(rContext: SegmentType): Double = wordseg.wordseg.dropInferenceMode match {
 	  case IGNOREDROP =>
 	    throw new Error("Ignoring drop, Shouldn't be in dropProbRContext")
 	  case INFERDROP(priorDrop,priorNodrop) =>
-		  val dropped = deleted.getOrElse(SimpleRContext(segmentToType(rContext)), 0)
-		  val notDropped = realized.getOrElse(SimpleRContext(segmentToType(rContext)), 0)
+		  val dropped = deleted1.getOrElse(SimpleRContext(segmentToType(rContext)), 0)
+		  val notDropped = realized1.getOrElse(SimpleRContext(segmentToType(rContext)), 0)
 		  (dropped + priorDrop) / (dropped + notDropped + priorDrop + priorNodrop)
 	  case FIXDROP(p) =>
 	    if (isConsonant(rContext))
@@ -314,8 +364,8 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	    case IGNOREDROP =>
 	      throw new Error("Ignoring drop, Shouldn't be in dropProbRContext")
 	    case INFERDROP(priorDrop,priorNodrop) =>
-	      val dropped = deleted.getOrElse(SimpleLRContext(segmentToType(lContext),segmentToType(rContext)), 0)
-		  val notDropped = realized.getOrElse(SimpleLRContext(segmentToType(lContext),segmentToType(rContext)), 0)
+	      val dropped = deleted1.getOrElse(SimpleLRContext(segmentToType(lContext),segmentToType(rContext)), 0)
+		  val notDropped = realized1.getOrElse(SimpleLRContext(segmentToType(lContext),segmentToType(rContext)), 0)
 		  (dropped + priorDrop) / (dropped + notDropped + priorDrop + priorNodrop)
 	    case FIXDROP(p) =>
 		  if (isConsonant(rContext))
@@ -354,47 +404,47 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		  case GlobalFix =>
 		    wordseg.wordseg.dropInferenceMode match {
 		      case INFERDROP(priorDrop,priorNodrop) =>
-			  	Gamma.logGamma(nDropped+priorDrop)+Gamma.logGamma(nNotDropped+priorNodrop)-Gamma.logGamma(nDropped+nNotDropped+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(nD1+priorDrop)+Gamma.logGamma(nNotD1+priorNodrop)-Gamma.logGamma(nD1+nNotD1+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)
 		      case FIXDROP(p) =>
-			  	nDropped*math.log(p)+nNotDropped*math.log(1-p)
+			  	nD1*math.log(p)+nNotD1*math.log(1-p)
 		    }
 		  case CVPFollows =>
 		    wordseg.wordseg.dropInferenceMode match {
 		      case INFERDROP(priorDrop,priorNodrop) =>
-			  	Gamma.logGamma(deleted.getOrElse(SimpleRContext(Consonant),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleRContext(Consonant),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleRContext(Consonant),0)+realized.getOrElse(SimpleRContext(Consonant),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Consonant),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleRContext(Consonant),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Consonant),0)+realized1.getOrElse(SimpleRContext(Consonant),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+	        
-			  	Gamma.logGamma(deleted.getOrElse(SimpleRContext(Vowel),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleRContext(Vowel),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleRContext(Vowel),0)+realized.getOrElse(SimpleRContext(Vowel),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Vowel),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleRContext(Vowel),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Vowel),0)+realized1.getOrElse(SimpleRContext(Vowel),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted.getOrElse(SimpleRContext(Pause),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleRContext(Pause),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleRContext(Pause),0)+realized.getOrElse(SimpleRContext(Pause),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Pause),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleRContext(Pause),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Pause),0)+realized1.getOrElse(SimpleRContext(Pause),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)
 			  case FIXDROP(p) =>
-			  	deleted.getOrElse(SimpleRContext(Consonant),0)*math.log(0.37)+realized.getOrElse(SimpleRContext(Consonant),0)*math.log(1-0.37)+
-			  	deleted.getOrElse(SimpleRContext(Vowel),0)*math.log(0.22) + realized.getOrElse(SimpleRContext(Vowel),0)*math.log(1-0.22)+
-			  	deleted.getOrElse(SimpleRContext(Pause),0)*math.log(0.14)+realized.getOrElse(SimpleRContext(Pause),0)*math.log(1-0.14)
+			  	deleted1.getOrElse(SimpleRContext(Consonant),0)*math.log(0.37)+realized1.getOrElse(SimpleRContext(Consonant),0)*math.log(1-0.37)+
+			  	deleted1.getOrElse(SimpleRContext(Vowel),0)*math.log(0.22) + realized1.getOrElse(SimpleRContext(Vowel),0)*math.log(1-0.22)+
+			  	deleted1.getOrElse(SimpleRContext(Pause),0)*math.log(0.14)+realized1.getOrElse(SimpleRContext(Pause),0)*math.log(1-0.14)
 		    }
 		  case CVPLeftRight =>
 		    wordseg.wordseg.dropInferenceMode match {
 		      case INFERDROP(priorDrop,priorNodrop) =>
-			  	Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Consonant,Consonant),0)+realized.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+realized1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+	        
-			  	Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Consonant,Vowel),0)+realized.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+realized1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Consonant,Pause),0)+realized.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Pause),0)+realized1.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Vowel,Consonant),0)+realized.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+realized1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+	        
-			  	Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Vowel,Vowel),0)+realized.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+realized1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorDrop)+Gamma.logGamma(realized.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorNodrop)-Gamma.logGamma(deleted.getOrElse(SimpleLRContext(Vowel,Pause),0)+realized.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorDrop+priorNodrop)+
+			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Pause),0)+realized1.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorDrop+priorNodrop)+
 			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)
 		     case FIXDROP(_) =>
-		        deleted.getOrElse(SimpleLRContext(Consonant,Consonant),0)*math.log(0.62)+realized.getOrElse(SimpleLRContext(Consonant,Consonant),0)*math.log(1-0.62)+     
-			  	deleted.getOrElse(SimpleLRContext(Consonant,Vowel),0)*math.log(0.42)+realized.getOrElse(SimpleLRContext(Consonant,Vowel),0)*math.log(1-0.42)+
-			  	deleted.getOrElse(SimpleLRContext(Consonant,Pause),0)*math.log(0.36)+realized.getOrElse(SimpleLRContext(Consonant,Pause),0)*math.log(1-0.36)+
-			  	deleted.getOrElse(SimpleLRContext(Vowel,Consonant),0)*math.log(0.23)+realized.getOrElse(SimpleLRContext(Vowel,Consonant),0)*math.log(1-0.23)+
-			  	deleted.getOrElse(SimpleLRContext(Vowel,Vowel),0)*math.log(0.15)+realized.getOrElse(SimpleLRContext(Vowel,Vowel),0)*math.log(1-0.15)+
-			  	deleted.getOrElse(SimpleLRContext(Vowel,Pause),0)*math.log(0.07)+realized.getOrElse(SimpleLRContext(Vowel,Pause),0)*math.log(1-0.07)
+		        deleted1.getOrElse(SimpleLRContext(Consonant,Consonant),0)*math.log(0.62)+realized1.getOrElse(SimpleLRContext(Consonant,Consonant),0)*math.log(1-0.62)+     
+			  	deleted1.getOrElse(SimpleLRContext(Consonant,Vowel),0)*math.log(0.42)+realized1.getOrElse(SimpleLRContext(Consonant,Vowel),0)*math.log(1-0.42)+
+			  	deleted1.getOrElse(SimpleLRContext(Consonant,Pause),0)*math.log(0.36)+realized1.getOrElse(SimpleLRContext(Consonant,Pause),0)*math.log(1-0.36)+
+			  	deleted1.getOrElse(SimpleLRContext(Vowel,Consonant),0)*math.log(0.23)+realized1.getOrElse(SimpleLRContext(Vowel,Consonant),0)*math.log(1-0.23)+
+			  	deleted1.getOrElse(SimpleLRContext(Vowel,Vowel),0)*math.log(0.15)+realized1.getOrElse(SimpleLRContext(Vowel,Vowel),0)*math.log(1-0.15)+
+			  	deleted1.getOrElse(SimpleLRContext(Vowel,Pause),0)*math.log(0.07)+realized1.getOrElse(SimpleLRContext(Vowel,Pause),0)*math.log(1-0.07)
 			  
 		    }
 	  }
@@ -414,7 +464,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	    1.0
 	  } else {
 	  val res = SymbolTable(u.get(u.size-1)) match {
-	  case DROPSYMBOL =>
+	  case DROP1 =>
 	    val rContext = rWord.get(rWord.size()-1)
 	    if (u==s)
 	      (1-dropProb(u,rContext))
@@ -437,7 +487,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	
 	
 	def _findBoundary(op: Int=>Int)(cPos: Int): Int = boundaries(cPos) match {
-    	case WBoundaryDrop | WBoundaryNodrop | UBoundaryDrop | UBoundaryNodrop => cPos
+    	case WBoundaryDrop1 | WBoundaryNoDrop1 | UBoundaryDrop1 | UBoundaryNoDrop1 => cPos
     	case NoBoundary =>  _findBoundary(op)(op(cPos))
 	}
    
@@ -460,7 +510,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	  val word = data.subList(sPos, ePos)
 	  val wD = suffix(word,DROPSEG)
 	  boundaries(ePos) match {
-	    case UBoundaryDrop | WBoundaryDrop =>
+	    case UBoundaryDrop1 | WBoundaryDrop1 =>
 	      (word,wD,wD)
 	    case _ =>
 	      (word,word,wD)
@@ -482,7 +532,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	def getWord(sPos: Int, ePos: Int): (WordType,WordType) = {
 	  val word = data.subList(sPos, ePos)
 	  boundaries(ePos) match {
-	    case UBoundaryDrop | WBoundaryDrop =>
+	    case UBoundaryDrop1 | WBoundaryDrop1 =>
 	      (word,suffix(word,DROPSEG))
 	    case _ =>
 	      (word,word)
@@ -497,19 +547,19 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	    else 
 	      boundaries(cPos) match {
 	      	case NoBoundary => inner(sPos,cPos+1,res)
-	      	case WBoundaryDrop => {
+	      	case WBoundaryDrop1 => {
  	      	  res.append(wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"::")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
-	      	case WBoundaryNodrop => {
+	      	case WBoundaryNoDrop1 => {
  	      	  res.append(wToS(data.subList(sPos-1, cPos))+"::")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
-	      	case UBoundaryDrop => {
+	      	case UBoundaryDrop1 => {
 	      	  res.append(wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"\n")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
-	      	case UBoundaryNodrop => {
+	      	case UBoundaryNoDrop1 => {
  	      	  res.append(wToS(data.subList(sPos-1, cPos))+"\n")
  	      	  inner(cPos+1,cPos+1,res)
 	      	}
@@ -524,20 +574,20 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	    else 
 	      boundaries(cPos) match {
 	      	case NoBoundary => inner(sPos,cPos+1)
-	      	case WBoundaryDrop => {
+	      	case WBoundaryDrop1 => {
  	      	  out.print(
  	      	      wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+sep)
  	      	  inner(cPos+1,cPos+1)
 	      	}
-	      	case WBoundaryNodrop => {
+	      	case WBoundaryNoDrop1 => {
  	      	  out.print(wToS(data.subList(sPos-1, cPos))+sep)
  	      	  inner(cPos+1,cPos+1)
 	      	}
-	      	case UBoundaryDrop => {
+	      	case UBoundaryDrop1 => {
 	      	  out.print(wToS(suffix(data.subList(sPos-1, cPos),DROPSEG))+"\n")
  	      	  inner(cPos+1,cPos+1)
 	      	}
-	      	case UBoundaryNodrop => {
+	      	case UBoundaryNoDrop1 => {
  	      	  out.print(wToS(data.subList(sPos-1, cPos))+"\n")
  	      	  inner(cPos+1,cPos+1)
 	      	}
@@ -555,19 +605,19 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 	      	  out.print("0")
 	      	  inner(sPos,cPos+1)
 	      	}
-	      	case WBoundaryDrop => {
+	      	case WBoundaryDrop1 => {
  	      	  out.print("t")
  	      	  inner(cPos+1,cPos+1)
 	      	}
-	      	case WBoundaryNodrop => {
+	      	case WBoundaryNoDrop1 => {
  	      	  out.print("1")
  	      	  inner(cPos+1,cPos+1)
 	      	}
-	      	case UBoundaryDrop => {
+	      	case UBoundaryDrop1 => {
 	      	  out.print("t\n")
  	      	  inner(cPos+1,cPos+1)
 	      	}
-	      	case UBoundaryNodrop => {
+	      	case UBoundaryNoDrop1 => {
 	      	  out.print("\n")
  	      	  inner(cPos+1,cPos+1)
 	      	}
@@ -593,24 +643,24 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		  boundaries(i) match {
 		    case NoBoundary => {
 		      goldBoundaries(i) match {
-		        case WBoundaryDrop =>
+		        case WBoundaryDrop1 =>
 		          trueBoundaries+=1
 		          trueTokens+=1
 		          trueStartPos=i
 		          trueDrops+=1
-		        case WBoundaryNodrop =>
+		        case WBoundaryNoDrop1 =>
 		          trueBoundaries+=1
 		          trueTokens+=1
 		          trueStartPos=i		          
 		        case _ =>
 		      }
 		    }
-		    case WBoundaryDrop => {
+		    case WBoundaryDrop1 => {
 		      totalBoundaries+=1
 		      totalTokens+=1
 		      totalDrops+=1
 		      goldBoundaries(i) match {
-		        case WBoundaryDrop | WBoundaryNodrop => {
+		        case WBoundaryDrop1 | WBoundaryNoDrop1 => {
 		          trueBoundaries+=1
 		          correctBoundaries+=1
 		          trueTokens+=1
@@ -618,7 +668,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		          //if (predStartPos==trueStartPos && goldBoundaries(i)==boundaries(i)) correctTokens+=1
 		          if (predStartPos==trueStartPos) correctTokens+=1		          
 		          trueStartPos=i
-		          if (goldBoundaries(i)==WBoundaryDrop) {
+		          if (goldBoundaries(i)==WBoundaryDrop1) {
 		            trueDrops+=1
 		            correctDrops+=1
 		          }
@@ -627,17 +677,17 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		      }
 		      predStartPos=i
 		    }
-		    case WBoundaryNodrop => {
+		    case WBoundaryNoDrop1 => {
 		      totalBoundaries+=1
 		      totalTokens+=1
 		      goldBoundaries(i) match {
-		        case WBoundaryDrop | WBoundaryNodrop => {
+		        case WBoundaryDrop1 | WBoundaryNoDrop1 => {
 		          trueBoundaries+=1
 		          correctBoundaries+=1
 		          trueTokens+=1
 		          if (predStartPos==trueStartPos) correctTokens+=1
 		          trueStartPos=i
-		          if (goldBoundaries(i)==WBoundaryDrop) {
+		          if (goldBoundaries(i)==WBoundaryDrop1) {
 		            trueDrops+=1
 		          }		          
 		        }
@@ -645,11 +695,11 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING: String = "*
 		      }
 		      predStartPos=i
 		    }
-		    case UBoundaryDrop | UBoundaryNodrop => {
+		    case UBoundaryDrop1 | UBoundaryNoDrop1 => {
 		      totalTokens+=1
 		      trueTokens+=1
-		      if (boundaries(i)==UBoundaryDrop) totalDrops+=1
-		      if (goldBoundaries(i)==UBoundaryDrop) {
+		      if (boundaries(i)==UBoundaryDrop1) totalDrops+=1
+		      if (goldBoundaries(i)==UBoundaryDrop1) {
 		        trueDrops+=1
 		        correctDrops+= {if (goldBoundaries(i)==boundaries(i)) 1 else 0}
 		      }
