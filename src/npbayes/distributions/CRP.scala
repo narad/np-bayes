@@ -130,6 +130,10 @@ class TypeCount {
 }
 
 class CRP[T](var concentration: Double, var discount: Double, val base: PosteriorPredictive[T], val assumption: HEURISTIC=EXACT) extends PosteriorPredictive[T] {
+  
+  override def toString =
+    "c="+concentration+", d="+discount+", nt="+_tCount+", ct="+_oCount
+  
   val _random = new Random()
   
   val labelTabels: HashMap[T,TypeCount] = new HashMap
@@ -188,24 +192,32 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
    */
   def _logProbSeating(concentration: Double, discount: Double): Double = {
     //cf e.g. Goldwate et al., 2011, p.2342 (1-Param,discount=0) and p.2345 (2-Param)
-    var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
-    for (tokenCount <- labelTabels.values) {
-      val iter : JIterator[JEntry[Int,Int]] = tokenCount.nCust_nTables.entrySet().iterator()
-      while (iter.hasNext()) {
-        val entry = iter.next()
-        val nC = entry.getKey()
-        val nT = entry.getValue()
-        res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
-      }
-/*      for ((nC,nT) <- tokenCount.nCust_nTables)
-    	  res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT*/
+    if (_oCount==1)
+      0.0
+    else { 
+	    var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
+	    for (tokenCount <- labelTabels.values) {
+	      val iter : JIterator[JEntry[Int,Int]] = tokenCount.nCust_nTables.entrySet().iterator()
+	      while (iter.hasNext()) {
+	        val entry = iter.next()
+	        val nC = entry.getKey()
+	        val nT = entry.getValue()
+	        res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
+	      }
+	/*      for ((nC,nT) <- tokenCount.nCust_nTables)
+	    	  res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT*/
+	    }
+	    if (discount==0)
+	      res += _tCount*math.log(concentration)
+	    else
+	      res += (_tCount*math.log(discount)+Gamma.logGamma(concentration/discount+_tCount)-
+	    		  Gamma.logGamma(concentration/discount))
+	    if (res>0) {
+	      val w = 0
+	    }
+	      
+	    res
     }
-    if (discount==0)
-      res += _tCount*math.log(concentration)
-    else
-      res += (_tCount*math.log(discount)+Gamma.logGamma(concentration/discount+_tCount)-
-    		  Gamma.logGamma(concentration/discount))
-    res
   }
   
   def _pSitAtOld(obs: T) =
@@ -291,6 +303,12 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   def _logProbSeatingByConc: (Double => Double) = 
     _logProbSeating(_: Double, discount)
   
+    
+  def setConcentration(a: Double) = {
+    concentration=a
+//    println(concentration)
+  }
+    
   def _logProbSeatingByDisc: (Double => Double) =
     _logProbSeating(concentration, _: Double)
     

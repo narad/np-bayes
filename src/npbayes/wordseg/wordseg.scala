@@ -73,7 +73,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def HYPERPARAM = getBoolean("--hyper",false)
 	def COUPLED = getBoolean("--coupled",false)
 	def SHAPE = getDouble("--shape",0.1)
-	def RATE = getDouble("--shape",0.1)
+	def RATE = getDouble("--rate",0.1)
 }
 
 object wordseg {
@@ -189,6 +189,8 @@ object wordseg {
 	    val temperature: Double = annealTemperature(i)
 	    isAnnealing = temperature!=1.0
 	    sample(1/temperature)
+	    if (hyperparam)
+	    	model.resampleConcentration
 	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model.evaluate +
 	    	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
@@ -196,8 +198,6 @@ object wordseg {
 	    	  " " + model.data.showDropProbs} +
 	    	  " " + model.hyperParam
 	    println(log); traceFile.println(log)
-	    if (hyperparam)
-	    	model.resampleConcentration
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {
 	      model.writeAnalysisB(sampleFile)
 	      sampleFile.println()
