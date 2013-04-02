@@ -10,7 +10,6 @@ import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
 import npbayes.wordseg.`package`
 import npbayes.wordseg.IGNOREDROP
-import optimizer.SliceSampler
 import npbayes.Utils
 import java.util.Random
 import npbayes.LexGenerator
@@ -18,7 +17,7 @@ import npbayes.UNIUNLEARNED
 import npbayes.UNILEARNED
 import npbayes.UNILEARNEDVOWELS
 import org.apache.commons.math3.special.Gamma
-import optimizer.NormalMHSampler
+import optimizer.samplers1D
 
 
 
@@ -180,14 +179,36 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	
    def hyperParam: String = "alpha0 "+pypUni.concentration
    
+
+   
+   
    def resampleConcentration = {
+      def proposallogpdf(x: Double,y: Double): Double = {
+        math.log(gaussian(y,math.abs(y)*wordseg.wordseg.hsmhvar,x))
+      }
+ 
+      def proposalsample(y: Double): Double = {
+        nextGaussian(y, math.abs(y)*wordseg.wordseg.hsmhvar)
+      }
+
       def logpdf(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
-      val alpha0 = new SliceSampler(logpdf,0.0,Double.PositiveInfinity).sliceSample1D(pypUni.concentration, pypUni.concentration/32.0, 20)
-//      val alpha0 = new NormalMHSampler(logpdf,0,Double.PositiveInfinity,0.1,true).sample(pypUni.concentration,20,true)      
+      val alpha0 = wordseg.wordseg.hsample match {
+        case "slice" =>
+        	var tmpx0 = pypUni.concentration
+        	var oldlogpdf:Double = 1.0
+	         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+	           val tmp = samplers1D.slicesample(tmpx0, logpdf,oldlogpdf)
+	           tmpx0 = tmp._1
+	           oldlogpdf = tmp._2
+	         }
+	         tmpx0	             
+        case "mh" =>
+          samplers1D.mhsample(pypUni.concentration, logpdf, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, true)
+      }
 	  pypUni.concentration = alpha0 
 	}	  
 	

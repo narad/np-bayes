@@ -74,6 +74,9 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def COUPLED = getBoolean("--coupled",false)
 	def SHAPE = getDouble("--shape",0.1)
 	def RATE = getDouble("--rate",0.1)
+	def HSAMPLE = getString("--hsampler","slice")
+	def HSAMPLEITERS = getInt("--hsampleiters",1)
+	def HSMHSSD = getDouble("--hsmhsd",0.1)
 }
 
 object wordseg {
@@ -87,8 +90,9 @@ object wordseg {
     var rate: Double = 0.1
     var hyperparam: Boolean = false
     var coupled: Boolean = false
-    
-    
+    var hsample: String = null
+    var hsampleiters: Int = 0
+    var hsmhvar: Double = 0.1
 	def main(args: Array[String]) = {
 	  val options = new TaggerParams(args)
 	  val assumption = options.ASSUMPTION match {
@@ -101,8 +105,9 @@ object wordseg {
 	    case _ =>
 	      throw new Error(options.ASSUMPTION+ " is invalid value for --asumption: either EXACT, MINPATH or MAXPATH")
 	  }
-	
-	  
+	hsampleiters = options.HSAMPLEITERS
+	hsample = options.HSAMPLE
+	hsmhvar = options.HSMHSSD
 	isConsonant = new Identifier(options.CONSLIST)
  	isVowel = new Identifier(options.VOWELLIST)
 	isPause = new Identifier(options.SILLIST)

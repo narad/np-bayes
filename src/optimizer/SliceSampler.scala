@@ -17,6 +17,7 @@ class SliceSampler(logpdf: (Double=>Double),min_x: Double, max_x: Double)
 	def logF(x: Double): Double = 
 	  if (min_x < x && x < max_x) {
 		      val fx = logpdf(x)
+//		      println("f("+x+")="+fx)
 		      assert(fx!=Double.PositiveInfinity && fx!=Double.NegativeInfinity) 
 		      fx
 		  }	else {
@@ -62,8 +63,8 @@ class SliceSampler(logpdf: (Double=>Double),min_x: Double, max_x: Double)
 			/*
 			 * The "shrinkage" procedure, see Fig.5 and Fig.6
 			 */
-			var left1 = left
-			var right1 = right
+			var left1 = if (left<min_x) min_x else left
+			var right1 = if (right>max_x) max_x else right
 			var break=false
 			while(!break)
 			{

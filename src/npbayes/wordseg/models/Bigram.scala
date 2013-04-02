@@ -8,20 +8,14 @@ import scala.util.Random.shuffle
 import scala.collection.mutable.HashMap
 import java.io.PrintStream
 import npbayes.wordseg.IGNOREDROP
-import optimizer.SliceSampler
 import npbayes.Utils
 import org.apache.commons.math3.random.RandomGenerator
 import java.util.Random
-import optimizer.SliceSampler
-import optimizer.SliceSampler
-import optimizer.SliceSampler
 import npbayes.LexGenerator
 import npbayes.BIUNLEARNED
 import npbayes.BILEARNEDVOWELS
 import npbayes.BILEARNED
-import optimizer.NormalMHSampler
-import optimizer.NormalMHSampler
-import optimizer.NormalMHSampler
+import optimizer.samplers1D
 abstract class BContext
 
 case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: WordType, val w1D: WordType,
@@ -372,7 +366,17 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}
 
 	def resampleConcentration = {
+	  def proposallogpdf(x: Double,y: Double): Double = {
+        math.log(gaussian(y,math.abs(y)*wordseg.wordseg.hsmhvar,x))
+      }
+ 
+      def proposalsample(y: Double): Double = {
+        nextGaussian(y, math.abs(y)*wordseg.wordseg.hsmhvar)
+      }
+	  
       def logpdfUni(alpha: Double): Double = {
+    	  if (alpha<0)
+    		return Double.NegativeInfinity
 	      var result = 0
 	      val logPrior = 
 	        	if (wordseg.wordseg.shape != -1)
@@ -381,9 +385,22 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 		          0
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
-      
-      //pypUni.concentration = new SliceSampler(logpdfUni,0.0,Double.PositiveInfinity).sliceSample1D(pypUni.concentration, pypUni.concentration/32.0, 20)
-      pypUni.concentration = new NormalMHSampler(logpdfUni,0,Double.PositiveInfinity,0.1,true).sample(pypUni.concentration,20,true)      
+      	
+      pypUni.concentration = wordseg.wordseg.hsample match {
+        case "slice" => {
+         var tmpx0 = pypUni.concentration
+         var oldllh = 1.0
+         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+           val tmp = samplers1D.slicesample(tmpx0, logpdfUni, oldllh,tmpx0/32.0)
+           tmpx0 = tmp._1
+           oldllh = tmp._2
+         }
+         tmpx0
+        }
+        case "mh" =>
+         samplers1D.mhsample(pypUni.concentration, logpdfUni, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)  
+      }
+              
 
       
       /**
@@ -391,6 +408,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	   */
       if (wordseg.wordseg.coupled) {
 	      def logpdfBi(alpha: Double): Double = {
+	    	  if (alpha<0)
+	            return Double.NegativeInfinity
 		      var result = 0
 		      val logPrior = 
 		        if (wordseg.wordseg.shape != -1)
@@ -404,16 +423,22 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 		  } 
 	
 	      val oldSharedBigramAlpha = pypBis.head._2.concentration
-	      //val newSharedBigramAlpha = new SliceSampler(logpdfBi,0.0,Double.PositiveInfinity).sliceSample1D(oldSharedBigramAlpha,oldSharedBigramAlpha/32.0, 20)
-	      val newSharedBigramAlpha = new NormalMHSampler(logpdfBi,0,Double.PositiveInfinity,0.1,true).sample(oldSharedBigramAlpha, 1,true)
-/*	      for (bCRP <- pypBis) {
-	        System.err.println(newSharedBigramAlpha)
-			bCRP._2.setConcentration(newSharedBigramAlpha)  
-	      }*/
+	      val newSharedBigramAlpha = wordseg.wordseg.hsample match {
+	        case "mh" =>
+	          samplers1D.mhsample(oldSharedBigramAlpha, logpdfBi, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)
+	        case "slice" =>
+			 var tmpx0 = oldSharedBigramAlpha
+			 var oldllh = 1.0
+	         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+	           val tmp = samplers1D.slicesample(tmpx0, logpdfBi, oldllh,tmpx0/32.0)
+	           tmpx0 = tmp._1
+	           oldllh = tmp._2
+	         }
+	         tmpx0	          
+	      } 
 	      for (bi <- pypBis.values) {
 	        bi.setConcentration(newSharedBigramAlpha)
 	      }
-//	      val r=0
       } else {
         for (bCRP <- pypBis.values) {
         	def logpdf(alpha: Double): Double = {
@@ -422,7 +447,19 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 		     bCRP.logProbSeating(alpha) + logPrior
 		    }
         	val x = bCRP.concentration
-        	bCRP.concentration = new SliceSampler(logpdf,0.0,Double.PositiveInfinity).sliceSample1D(x,x/32.0,20)
+        	bCRP.concentration = wordseg.wordseg.hsample match {
+        	  case "slice" =>
+				 var tmpx0 = x
+				 var oldllh = 1.0
+		         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+		           val tmp = samplers1D.slicesample(tmpx0, logpdf, oldllh,tmpx0/32.0)
+		           tmpx0 = tmp._1
+		           oldllh = tmp._2
+		         }
+		         tmpx0
+        	  case "mh" =>
+        	    samplers1D.mhsample(x, logpdf, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)        	    
+        	}
         }
       }
 	}	  
@@ -514,7 +551,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	    	case BigramMedialContext(leftU,w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rightO,rightU) =>
 	    	  val res = __reseatProbs(leftU, w1D, w1O, w2U, w2O, rightU)
 	    	  updateBoundary(pos, res.sample(anneal), context)
-	    	case BigramFinalContext(leftU,wO,wU,wD) =>
+	    	case BigramFinalContext(leftU,wO,wU,wD) => 
 	    	  val res = __reseatProbs(leftU,wD,wO)
 	    	  updateBoundary(pos,res.sample(anneal), context)
 	  }	      
