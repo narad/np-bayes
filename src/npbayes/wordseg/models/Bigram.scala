@@ -387,20 +387,26 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	    }
       	
       pypUni.concentration = wordseg.wordseg.hsample match {
-        case "slice" => {
+        case "slice" | "sliceadd" | "slicecheck" => {
          var tmpx0 = pypUni.concentration
          var oldllh = 1.0
          for (i <- 0 until wordseg.wordseg.hsampleiters) {
-           val tmp = samplers1D.slicesample(tmpx0, logpdfUni, oldllh,tmpx0/32.0)
+           val tmp = wordseg.wordseg.hsample match {
+           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
+           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
+           	case "slicecheck" => samplers1D.slicesampleCheck(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
+           	case _ => throw new Error("Invalid slice-sampler")
+           }
            tmpx0 = tmp._1
            oldllh = tmp._2
+//           System.err.println(tmpx0)
          }
          tmpx0
         }
         case "mh" =>
          samplers1D.mhsample(pypUni.concentration, logpdfUni, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)  
       }
-              
+            
 
       
       /**
@@ -419,6 +425,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 		      var res: Double = 0
 		      for (bCRP <- pypBis.values)
 		        res += bCRP.logProbSeating(alpha)
+		      assert(res!=Double.NegativeInfinity)
 		      res + logPrior
 		  } 
 	
@@ -426,13 +433,20 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      val newSharedBigramAlpha = wordseg.wordseg.hsample match {
 	        case "mh" =>
 	          samplers1D.mhsample(oldSharedBigramAlpha, logpdfBi, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)
-	        case "slice" =>
+	        case "slice" | "sliceadd" | "slicecheck" =>
 			 var tmpx0 = oldSharedBigramAlpha
 			 var oldllh = 1.0
+//			 System.err.println("a1")
 	         for (i <- 0 until wordseg.wordseg.hsampleiters) {
-	           val tmp = samplers1D.slicesample(tmpx0, logpdfBi, oldllh,tmpx0/32.0)
+	           val tmp = wordseg.wordseg.hsample match {
+	           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdfBi, oldllh)//,tmpx0/32.0)
+	           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdfBi, oldllh)//,tmpx0/32.0)
+	           	case "slicecheck" => samplers1D.slicesampleCheck(tmpx0, logpdfBi, oldllh)//,tmpx0/32.0)
+	           	case _ => throw new Error("Invalid slice-sampler")
+	           }
 	           tmpx0 = tmp._1
 	           oldllh = tmp._2
+//	           System.err.println(tmpx0)
 	         }
 	         tmpx0	          
 	      } 
@@ -448,11 +462,16 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 		    }
         	val x = bCRP.concentration
         	bCRP.concentration = wordseg.wordseg.hsample match {
-        	  case "slice" =>
+        	  case "slice" | "sliceadd" | "slicecheck" =>
 				 var tmpx0 = x
 				 var oldllh = 1.0
 		         for (i <- 0 until wordseg.wordseg.hsampleiters) {
-		           val tmp = samplers1D.slicesample(tmpx0, logpdf, oldllh,tmpx0/32.0)
+		           val tmp =wordseg.wordseg.hsample match {
+		           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdf, oldllh)//,tmpx0/32.0)
+		           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdf, oldllh)//,tmpx0/32.0)
+		           	case "slicecheck" => samplers1D.slicesampleCheck(tmpx0, logpdf, oldllh)//,tmpx0/32.0)
+		           	case _ => throw new Error("Invalid slice-sampler")
+		           }
 		           tmpx0 = tmp._1
 		           oldllh = tmp._2
 		         }

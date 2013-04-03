@@ -51,9 +51,9 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    case UNIUNLEARNED =>
 	    	new MonkeyUnigram(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.5)
 	    case UNILEARNED =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1,false)
 	    case UNILEARNEDVOWELS =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1,true)
 	    case _ =>
 	      throw new Error("invalid value for lexgen: "+lexgen)
 	  }
@@ -197,11 +197,15 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
       val alpha0 = wordseg.wordseg.hsample match {
-        case "slice" =>
+        case "slice" | "sliceadd" | "slicecheck" =>
         	var tmpx0 = pypUni.concentration
         	var oldlogpdf:Double = 1.0
 	         for (i <- 0 until wordseg.wordseg.hsampleiters) {
-	           val tmp = samplers1D.slicesample(tmpx0, logpdf,oldlogpdf)
+	           val tmp = wordseg.wordseg.hsample match {
+	           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
+	           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
+	           	case "slicecheck" => samplers1D.slicesampleCheck(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
+	           }
 	           tmpx0 = tmp._1
 	           oldlogpdf = tmp._2
 	         }

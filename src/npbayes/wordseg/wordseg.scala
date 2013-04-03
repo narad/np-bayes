@@ -24,7 +24,7 @@ import npbayes.BILEARNEDVOWELS
 import npbayes.BILEARNED
 import npbayes.UNILEARNEDVOWELS
 import npbayes.UNILEARNED
-import npbayes.UNIUNLEARNED
+import npbayes.UNIUNLEARNED 
 
 
 /**
@@ -93,7 +93,7 @@ object wordseg {
     var hsample: String = null
     var hsampleiters: Int = 0
     var hsmhvar: Double = 0.1
-	def main(args: Array[String]) = {
+	def main(args: Array[String]) {
 	  val options = new TaggerParams(args)
 	  val assumption = options.ASSUMPTION match {
 	    case "EXACT" =>

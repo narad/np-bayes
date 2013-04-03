@@ -49,7 +49,7 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
 	      _removePhon(seg2.next()) 
 	    }
 	     */
-	   if (hasVowel || !vowelConstraint)
+	  if (hasVowel || !vowelConstraint)
 		res
 	  else
 	    0.0
