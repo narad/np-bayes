@@ -296,7 +296,8 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "
 			sentences+=((startPos,stringPos))
 			startPos=stringPos
 		}
-		for (l <- Source.fromFile(fName).getLines) processLine(l)
+//		for (l <- Source.fromFile(fName).getLines) processLine(l)
+		for (l <- Source.fromInputStream(new FileInputStream(fName), "utf-8").getLines) processLine(l)
 		val phones = new Builder[Int]
 		for (x <- seqPhones)
 		  phones.add(x)
@@ -309,7 +310,7 @@ class VarData(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "
 
 	val _random = new Random()
 	
-	var boundaries = randomBoundaries().toArray
+	var boundaries = randomBoundaries(wordseg.wordseg.binitProb).toArray
 	
 	/**
 	 * randomize boundaries

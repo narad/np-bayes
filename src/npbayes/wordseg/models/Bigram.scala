@@ -11,10 +11,10 @@ import npbayes.wordseg.IGNOREDROP
 import npbayes.Utils
 import org.apache.commons.math3.random.RandomGenerator
 import java.util.Random
-import npbayes.LexGenerator
-import npbayes.BIUNLEARNED
-import npbayes.BILEARNEDVOWELS
-import npbayes.BILEARNED
+import npbayes.wordseg.LexGenerator
+import npbayes.wordseg.BIUNLEARNED
+import npbayes.wordseg.BILEARNEDVOWELS
+import npbayes.wordseg.BILEARNED
 import optimizer.samplers1D
 abstract class BContext
 
@@ -365,7 +365,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  updateBoundary(pos, newBound,context)
 	}
 
-	def resampleConcentration = {
+	def resampleConcentration(hsiters: Int = 1) = {
 	  def proposallogpdf(x: Double,y: Double): Double = {
         math.log(gaussian(y,math.abs(y)*wordseg.wordseg.hsmhvar,x))
       }
@@ -390,7 +390,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
         case "slice" | "sliceadd" | "slicecheck" => {
          var tmpx0 = pypUni.concentration
          var oldllh = 1.0
-         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+         for (i <- 0 until hsiters) {
            val tmp = wordseg.wordseg.hsample match {
            	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
            	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
@@ -437,7 +437,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 			 var tmpx0 = oldSharedBigramAlpha
 			 var oldllh = 1.0
 //			 System.err.println("a1")
-	         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+	         for (i <- 0 until hsiters) {
 	           val tmp = wordseg.wordseg.hsample match {
 	           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdfBi, oldllh)//,tmpx0/32.0)
 	           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdfBi, oldllh)//,tmpx0/32.0)
@@ -465,7 +465,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
         	  case "slice" | "sliceadd" | "slicecheck" =>
 				 var tmpx0 = x
 				 var oldllh = 1.0
-		         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+		         for (i <- 0 until hsiters) {
 		           val tmp =wordseg.wordseg.hsample match {
 		           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdf, oldllh)//,tmpx0/32.0)
 		           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdf, oldllh)//,tmpx0/32.0)

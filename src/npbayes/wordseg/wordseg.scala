@@ -1,5 +1,13 @@
 package npbayes.wordseg
 
+abstract case class LexGenerator
+case object UNIUNLEARNED extends LexGenerator
+case object UNILEARNED extends LexGenerator
+case object UNILEARNEDVOWELS extends LexGenerator
+case object BIUNLEARNED extends LexGenerator
+case object BILEARNED extends LexGenerator
+case object BILEARNEDVOWELS extends LexGenerator
+
 import scala.collection.immutable.Map
 import scala.io.Source
 import npbayes.wordseg.models.Unigram
@@ -18,13 +26,13 @@ import npbayes.wordseg.lexgens.MonkeyBigram
 import npbayes.wordseg.lexgens.MonkeyBigram
 import npbayes.wordseg.lexgens.UnigramLearned
 import npbayes.wordseg.lexgens.BigramLearned
-import npbayes.LexGenerator
+/*import npbayes.LexGenerator
 import npbayes.BIUNLEARNED
 import npbayes.BILEARNEDVOWELS
 import npbayes.BILEARNED
 import npbayes.UNILEARNEDVOWELS
 import npbayes.UNILEARNED
-import npbayes.UNIUNLEARNED 
+import npbayes.UNIUNLEARNED*/ 
 
 
 /**
@@ -77,6 +85,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def HSAMPLE = getString("--hsampler","slice")
 	def HSAMPLEITERS = getInt("--hsampleiters",1)
 	def HSMHSSD = getDouble("--hsmhsd",0.1)
+	def HSLOWITERS = getInt("--hslowiters",0)
 }
 
 object wordseg {
@@ -93,6 +102,7 @@ object wordseg {
     var hsample: String = null
     var hsampleiters: Int = 0
     var hsmhvar: Double = 0.1
+    var binitProb: Double = 0.0
 	def main(args: Array[String]) {
 	  val options = new TaggerParams(args)
 	  val assumption = options.ASSUMPTION match {
@@ -111,6 +121,7 @@ object wordseg {
 	isConsonant = new Identifier(options.CONSLIST)
  	isVowel = new Identifier(options.VOWELLIST)
 	isPause = new Identifier(options.SILLIST)
+	binitProb = options.BOUNDINITPROB
 	  val contextModel = options.CONTEXTMODEL match {
 	    case "no" =>
 	      GlobalFix
@@ -173,8 +184,8 @@ object wordseg {
 	    case "LANGMODEL" =>
 	      model.gibbsSweepWords(_)
 	  }
-	  val traceFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".trace"))
-	  val sampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".samples"))
+	  val traceFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".trace"),"utf-8")
+	  val sampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".samples"),"utf-8")
 	  println(options)
 	  traceFile.println(options)
 	  model.init(options.GOLDINIT,options.BOUNDINITPROB)
@@ -195,7 +206,7 @@ object wordseg {
 	    isAnnealing = temperature!=1.0
 	    sample(1/temperature)
 	    if (hyperparam)
-	    	model.resampleConcentration
+	     	model.resampleConcentration({if (i<options.HSLOWITERS) 1 else options.HSAMPLEITERS})
 	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model.evaluate +
 	    	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
@@ -204,7 +215,7 @@ object wordseg {
 	    	  " " + model.hyperParam
 	    println(log); traceFile.println(log)
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {
-	      model.writeAnalysisB(sampleFile)
+	      model.writeAnalysis(sampleFile)
 	      sampleFile.println()
 	    }
 	  }

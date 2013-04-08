@@ -12,10 +12,10 @@ import npbayes.wordseg.`package`
 import npbayes.wordseg.IGNOREDROP
 import npbayes.Utils
 import java.util.Random
-import npbayes.LexGenerator
-import npbayes.UNIUNLEARNED
-import npbayes.UNILEARNED
-import npbayes.UNILEARNEDVOWELS
+import npbayes.wordseg.LexGenerator
+import npbayes.wordseg.UNIUNLEARNED
+import npbayes.wordseg.UNILEARNED
+import npbayes.wordseg.UNILEARNEDVOWELS
 import org.apache.commons.math3.special.Gamma
 import optimizer.samplers1D
 
@@ -182,7 +182,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 
    
    
-   def resampleConcentration = {
+   def resampleConcentration(hsiters: Int = 1) = {
       def proposallogpdf(x: Double,y: Double): Double = {
         math.log(gaussian(y,math.abs(y)*wordseg.wordseg.hsmhvar,x))
       }
@@ -200,7 +200,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
         case "slice" | "sliceadd" | "slicecheck" =>
         	var tmpx0 = pypUni.concentration
         	var oldlogpdf:Double = 1.0
-	         for (i <- 0 until wordseg.wordseg.hsampleiters) {
+	         for (i <- 0 until hsiters) {
 	           val tmp = wordseg.wordseg.hsample match {
 	           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
 	           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
@@ -211,7 +211,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	         }
 	         tmpx0	             
         case "mh" =>
-          samplers1D.mhsample(pypUni.concentration, logpdf, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, true)
+          samplers1D.mhsample(pypUni.concentration, logpdf, proposallogpdf, proposalsample, hsiters, true)
       }
 	  pypUni.concentration = alpha0 
 	}	  

@@ -1,12 +1,6 @@
 package npbayes
 
-abstract case class LexGenerator
-case object UNIUNLEARNED extends LexGenerator
-case object UNILEARNED extends LexGenerator
-case object UNILEARNEDVOWELS extends LexGenerator
-case object BIUNLEARNED extends LexGenerator
-case object BILEARNED extends LexGenerator
-case object BILEARNEDVOWELS extends LexGenerator
+
 
 
 package object wordseg {

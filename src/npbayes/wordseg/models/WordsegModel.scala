@@ -16,7 +16,7 @@ abstract class WordsegModel {
 	 */
 	def gibbsSweepWords(anneal: Double=1.0): Double
 	
-	def resampleConcentration
+	def resampleConcentration(hsiters: Int=1): Unit
 	
 	def hyperParam: String 
 	
