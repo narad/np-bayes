@@ -1,13 +1,5 @@
 package npbayes.wordseg
 
-abstract case class LexGenerator
-case object UNIUNLEARNED extends LexGenerator
-case object UNILEARNED extends LexGenerator
-case object UNILEARNEDVOWELS extends LexGenerator
-case object BIUNLEARNED extends LexGenerator
-case object BILEARNED extends LexGenerator
-case object BILEARNEDVOWELS extends LexGenerator
-
 import scala.collection.immutable.Map
 import scala.io.Source
 import npbayes.wordseg.models.Unigram
@@ -26,6 +18,16 @@ import npbayes.wordseg.lexgens.MonkeyBigram
 import npbayes.wordseg.lexgens.MonkeyBigram
 import npbayes.wordseg.lexgens.UnigramLearned
 import npbayes.wordseg.lexgens.BigramLearned
+import scala.collection.mutable.LinkedList
+import scala.collection.mutable.ListBuffer
+
+abstract case class LexGenerator
+case object UNIUNLEARNED extends LexGenerator
+case object UNILEARNED extends LexGenerator
+case object UNILEARNEDVOWELS extends LexGenerator
+case object BIUNLEARNED extends LexGenerator
+case object BILEARNED extends LexGenerator
+case object BILEARNEDVOWELS extends LexGenerator
 /*import npbayes.LexGenerator
 import npbayes.BIUNLEARNED
 import npbayes.BILEARNEDVOWELS
@@ -50,42 +52,43 @@ case object IGNOREDROP extends DROPINFERENCEMODE
 
 
 class TaggerParams(args: Array[String]) extends ArgParser(args) {
-	def NGRAM = getString("--ngram", "2")
-	def ALPHA0 = getDouble("--alpha0", 100)
-	def ALPHA1 = getDouble("--alpha1", 3000)
-	def PSTOP = getDouble("--pstop", 0.5)	//monkey-model stop-probability
-	def LEXGEN = getString("--lexgen","monkey") //monkey, learned, vowel
-	def VOWELLIST = getString("--vowels","/home/bborschi/git/TDropping/vowels.txt")
-	def CONSLIST = getString("--consonants","/home/bborschi/git/TDropping/consonants.txt")
-	def SILLIST = getString("--pauses","/home/bborschi/git/TDropping/silences.txt")
-	def ITERS = getInt("--iters",1000)
-	def ANNEALITERS = getInt("--annealIters",1000)
-	def STARTTEMP = getDouble("--startTemp",1)
-	def STOPTEMP = getDouble("--stopTemp",1)
-	def DROPPROB = getDouble("--dropProb",0.0) //if set to -1, do inference, if set to 0.0, ignore
-	def DROPSEG = getString("--dropSeg","KRLKR") //what is the dropSegment (segment that actually occurs)
-	def DROPIND = getString("--dropInd","KRLKR") //what is the indicator (for evaluation)
-	def INPUT = getString("--input","")
-	def OUTPUT = getString("--output","")
-	def TRACE = getString("--trace","")
-	def ASSUMPTION = getString("--assumption","EXACT")
-	def GOLDINIT = getBoolean("--goldinit",false)
-	def MODE = getString("--mode","WORDSEG")
-	def BURNIN = getInt("--burnin",2000)
-	def SAMPLES = getInt("--sampleEvery",10)
-	def BOUNDINITPROB = getDouble("--binitProb",0.0)
-	def DROPPRIOR = getDouble("--dropPrior",1.0)
-	def NODROPPRIOR = getDouble("-noDropPrior",1.0)
-	def CONTEXTMODEL = getString("--context","no")
-	def DELAYRECOVERY = getBoolean("--delayRecovery",true)  //if set to true, no recovery during annealing
-	def HYPERPARAM = getBoolean("--hyper",false)
-	def COUPLED = getBoolean("--coupled",false)
-	def SHAPE = getDouble("--shape",0.1)
-	def RATE = getDouble("--rate",0.1)
-	def HSAMPLE = getString("--hsampler","slice")
-	def HSAMPLEITERS = getInt("--hsampleiters",1)
-	def HSMHSSD = getDouble("--hsmhsd",0.1)
-	def HSLOWITERS = getInt("--hslowiters",0)
+	
+	def NGRAM = getString("--ngram", "2");	params += (("ngram",NGRAM))
+	def ALPHA0 = getDouble("--alpha0", 100); params += (("alpha0",ALPHA0))
+	def ALPHA1 = getDouble("--alpha1", 3000); params += (("alpha1",ALPHA1))
+	def PSTOP = getDouble("--pstop", 0.5); params += (("pstop",PSTOP))	//monkey-model stop-probability
+	def LEXGEN = getString("--lexgen","monkey"); params += (("lexgen",LEXGEN)) //monkey, learned, vowel
+	def VOWELLIST = getString("--vowels","/home/bborschi/git/TDropping/vowels.txt"); params += (("vowels",VOWELLIST))
+	def CONSLIST = getString("--consonants","/home/bborschi/git/TDropping/consonants.txt"); params += (("consonants",CONSLIST))
+	def SILLIST = getString("--pauses","/home/bborschi/git/TDropping/silences.txt"); params += (("pauses",SILLIST))
+	def ITERS = getInt("--iters",1000); params += (("iters",ITERS))
+	def ANNEALITERS = getInt("--annealIters",1000); params += (("annealIters",ANNEALITERS))
+	def STARTTEMP = getDouble("--startTemp",1); params += (("startTemp",STARTTEMP))
+	def STOPTEMP = getDouble("--stopTemp",1); params += (("stopTemp",STOPTEMP))
+	def DROPPROB = getDouble("--dropProb",0.0); params += (("dropProb",DROPPROB)) //if set to -1, do inference, if set to 0.0, ignore
+	def DROPSEG = getString("--dropSeg","NONE"); params += (("dropSeg",DROPSEG)) //what is the dropSegment (segment that actually occurs)
+	def DROPIND = getString("--dropInd","NONE"); params += (("dropInd",DROPIND)) //what is the indicator (for evaluation)
+	def INPUT = getString("--input",""); params += (("input",INPUT))
+	def OUTPUT = getString("--output",""); params += (("output",OUTPUT))
+	def TRACE = getString("--trace",""); params += (("trace",TRACE))
+	def ASSUMPTION = getString("--assumption","EXACT"); params += (("assumption",ASSUMPTION))
+	def GOLDINIT = getBoolean("--goldinit",false); params += (("goldinit",GOLDINIT))
+	def MODE = getString("--mode","WORDSEG"); params += (("mode",MODE))
+	def BURNIN = getInt("--burnin",2000); params += (("burnin",BURNIN))
+	def SAMPLES = getInt("--sampleEvery",10); params += (("sampleEvery",SAMPLES))
+	def BOUNDINITPROB = getDouble("--binitProb",0.0); params += (("binitProb",BOUNDINITPROB))
+	def DROPPRIOR = getDouble("--dropPrior",1.0); params += (("dropPrior",DROPPRIOR))
+	def NODROPPRIOR = getDouble("-noDropPrior",1.0); params += (("noDropPrior",NODROPPRIOR))
+	def CONTEXTMODEL = getString("--context","no"); params += (("context",CONTEXTMODEL))
+	def DELAYRECOVERY = getBoolean("--delayRecovery",true); params += (("delayRecovery",DELAYRECOVERY))  //if set to true, no recovery during annealing
+	def HYPERPARAM = getBoolean("--hyper",false); params += (("hyper",HYPERPARAM))
+	def COUPLED = getBoolean("--coupled",false); params += (("coupled",COUPLED))
+	def SHAPE = getDouble("--shape",0.1); params += (("shape",SHAPE))
+	def RATE = getDouble("--rate",0.1); params += (("rate",RATE))
+	def HSAMPLE = getString("--hsampler","slice"); params += (("hsampler",HSAMPLE))
+	def HSAMPLEITERS = getInt("--hsampleiters",1); params += (("hsampleiters",HSAMPLEITERS))
+	def HSMHSSD = getDouble("--hsmhsd",0.1); params += (("hsmhsd",HSMHSSD))
+	def HSLOWITERS = getInt("--hslowiters",0); params += (("hslowiters",HSLOWITERS))
 }
 
 object wordseg {

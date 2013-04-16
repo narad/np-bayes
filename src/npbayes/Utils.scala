@@ -6,6 +6,7 @@ package npbayes
 import scala.collection.mutable.HashMap
 import scala.util.Random
 import org.apache.commons.math3.special.Gamma
+import scala.collection.mutable.ListBuffer
 
 /**
  * Jason Naradowsky's Argument parser
@@ -13,6 +14,7 @@ import org.apache.commons.math3.special.Gamma
  */
 class ArgParser(argArray: Array[String]) {
 	val arguments = new HashMap[Any,Any]
+	val params = new ListBuffer[(String,Any)]
 	var args = argArray
 	
 	def contains(str: String): Boolean = args.contains(str)
@@ -47,15 +49,15 @@ class ArgParser(argArray: Array[String]) {
 	
 	override def toString = {
 	  val res: StringBuffer = new StringBuffer
-	  for (i <- 0 until argArray.length by 2)
-	    res.append("# "+argArray(i)+" => "+argArray(i+1)+"\n")
+	  for ((arg,v) <- params)
+	    res.append("# --"+arg+" "+v.toString()+"\n")
 	  res.toString
 	}
 	  
 	
-	def addOption(arg: String, value: String) = {
+/*	def addOption(arg: String, value: String) = {
 	  args = (Array(arg, value) ++ args)
-	}
+	}*/
 }
 
 class Histogram {
