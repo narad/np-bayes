@@ -1,10 +1,10 @@
 package npbayes.wordseg.models
 
 import java.io.PrintStream
-import npbayes.wordseg.data.VarData
+import npbayes.wordseg.data.Data
 
 abstract class WordsegModel {
-	val data: VarData
+	val data: Data
 	def sanity: Boolean
 	def init(gold:Boolean = false, goldType:Double=0.5)
 	def logProb: Double

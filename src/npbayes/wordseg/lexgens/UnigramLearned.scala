@@ -1,7 +1,7 @@
 package npbayes.wordseg.lexgens
 
 import npbayes.distributions.PosteriorPredictive
-import npbayes.wordseg.data.WordType
+import npbayes.WordType
 import npbayes.wordseg.data.SegmentType
 import scala.collection.mutable.HashMap
 import org.apache.commons.math3.special.Gamma
@@ -34,9 +34,7 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
   def predProb(obs: WordType): Double = {
 	    var hasVowel: Boolean = false
     	var p = 1.0
-	    val segs = obs.iterator()
-	    while (segs.hasNext()) {
-	      val seg = segs.next()
+    	for (seg <- obs) {
 	      if (isVowel(seg))
 	        hasVowel = true
 	      p = p*_predPhon(seg)
@@ -79,9 +77,7 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
   def update(obs:  WordType): Double = {
     	var hasVowel = false
 	    var p=1.0
-	    val segs = obs.iterator()
-	    while (segs.hasNext()) {
-	      val seg = segs.next()
+	    for (seg <- obs){
 	      if (isVowel(seg))
 	        hasVowel = true
 	      p = p*_predPhon(seg)
@@ -97,11 +93,9 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
 
   def remove(obs: WordType): Double = { 
 	    var p=1.0
-	    val segs = obs.reverse().iterator()
 	    _removePhon(WB)
 	    p=p*_predPhon(WB)
-	    while (segs.hasNext()) {
-	      val seg = segs.next()
+	    for (seg <- obs.reverse) {
 	      _removePhon(seg)
 	      p*=_predPhon(seg)
 	    }

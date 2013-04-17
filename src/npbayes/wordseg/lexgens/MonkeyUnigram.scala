@@ -1,7 +1,7 @@
 package npbayes.wordseg.lexgens
 
 import npbayes.distributions.PosteriorPredictive
-import npbayes.wordseg.data.WordType
+import npbayes.WordType
 
 /**
  * Monkey-Generator for the Unigram model
