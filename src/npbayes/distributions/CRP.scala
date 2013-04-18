@@ -1,13 +1,10 @@
 package npbayes.distributions
-import npbayes.Utils
-import npbayes.wordseg
+
 
 import scala.collection.mutable.HashMap
-import scala.util.Random
-import scala.collection.mutable.WeakHashMap
-
-
+import scala.collection.mutable.OpenHashMap
 import scala.collection.mutable.LinkedList
+import scala.util.Random
 
 import org.apache.commons.math3.special.Gamma
 import java.util.TreeMap
@@ -26,8 +23,8 @@ case object MAXPATH extends HEURISTIC
  * I found this way of bookkeeping more efficient than maintaining
  * several independent Maps (obs->counts, obs->tableCounts, obs->tables)
  * 
- * not sure whether the java-TreeMap is really necessary and whether the
- * internal conversions lead to huge performance losses
+ * I'm using a JavaTreeMap explicitly to avoid any conversion overhead
+ * 
  * @author bborschi
  *
  */
@@ -136,7 +133,9 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   
   val _random = new Random()
   
-  val labelTabels: HashMap[T,TypeCount] = new HashMap
+  
+  //val labelTabels: HM[T,TypeCount] = new HM
+  val labelTabels: HM[T,TypeCount] = new HM
   val emptyCount = new TypeCount
   
   def _oCount(o: T): Int = labelTabels.getOrElse(o, emptyCount).nCust//hmObsCounts.getOrElse(o, 0)
@@ -204,17 +203,12 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
 	        val nT = entry.getValue()
 	        res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
 	      }
-	/*      for ((nC,nT) <- tokenCount.nCust_nTables)
-	    	  res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT*/
 	    }
 	    if (discount==0)
 	      res += _tCount*math.log(concentration)
 	    else
 	      res += (_tCount*math.log(discount)+Gamma.logGamma(concentration/discount+_tCount)-
 	    		  Gamma.logGamma(concentration/discount))
-	    if (res>0) {
-	      val w = 0
-	    }
 	      
 	    res
     }
@@ -240,13 +234,11 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
 	  if (p < oldT) {
 	    val nCust = labelTabels(obs).sitAtOld(p,discount)
 	    assert(nCust>0)
-//	    oldT/(_oCount-1+concentration)
 	    nCust/(_oCount-1+concentration)
 	  } else {
 	    labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
 	    val mProb = base.update(obs)
 	    _tCount+=1
-	    //assert(sanityCheck)
 	    concentration*mProb/(_oCount-1+concentration)
 	  }
      case MINPATH => 
@@ -293,7 +285,6 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       _tCount-=1
       if (counts.isEmpty)
         labelTabels.remove(obs)
-      //_pSitAtNew(obs)
       concentration*pProb / (_oCount+concentration)
     } else {
       (remCusts-discount)/(_oCount+concentration)
@@ -306,32 +297,12 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
     
   def setConcentration(a: Double) = {
     concentration=a
-//    println(concentration)
   }
     
   def _logProbSeatingByDisc: (Double => Double) =
     _logProbSeating(concentration, _: Double)
     
-  /**
-   * Sharon's idea (see her and Tom's 2006)
-   * we use a Normal-MH sampling, with mean = alpha, and variance = vratio*alpha, just
-   * like she did but with a proper prior
-   * 
-   * Gamma(alpha, beta)
-   * 
-   */
-  def sampleConcentrationMH(shape: Double, rate: Double, vratio: Double=0.01) = {
-    val x = concentration
-    val y = truncatedNormalVariate(x, vratio*x, 0)
-    val lq_xy = math.log(truncatedNormal(x, y, vratio*y,0))
-    val lq_yx = math.log(truncatedNormal(y,x,vratio*x,0))
-    val lpi_y = _logProbSeatingByConc(y)+Utils.lgammadistShapeRate(y,wordseg.wordseg.shape,wordseg.wordseg.rate)
-    val lpi_x = _logProbSeatingByConc(x)+Utils.lgammadistShapeRate(x,wordseg.wordseg.shape,wordseg.wordseg.rate)
-    if (_random.nextDouble<((lpi_y+lq_xy)-(lpi_x+lq_yx)))
-      concentration = y
-    else //reject, keep old value
-      concentration = x
-  }
+ 
     
     
   /**

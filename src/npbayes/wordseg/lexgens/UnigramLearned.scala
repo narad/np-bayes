@@ -3,6 +3,7 @@ package npbayes.wordseg.lexgens
 import npbayes.distributions.PosteriorPredictive
 import npbayes.WordType
 import npbayes.wordseg.data.SegmentType
+import npbayes.wordseg.HM
 import scala.collection.mutable.HashMap
 import org.apache.commons.math3.special.Gamma
 import java.util.{Iterator => JIterator}
@@ -19,7 +20,7 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
   val WB: SegmentType = -1000
   val normalizer: Double = nSegments*pseudoCount
   var obsCounts: Int = 0 //total number of observed segments
-  val phonCounts: HashMap[SegmentType,Int] = new HashMap //individual counts for observations
+  val phonCounts: HM[SegmentType,Int] = new HM //individual counts for observations
   def isVowel = npbayes.wordseg.wordseg.isVowel
 
   

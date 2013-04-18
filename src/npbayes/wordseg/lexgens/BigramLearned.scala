@@ -3,6 +3,7 @@ package npbayes.wordseg.lexgens
 import npbayes.distributions.PosteriorPredictive
 import npbayes.WordType
 import npbayes.wordseg.data.SegmentType
+import npbayes.wordseg.HM
 import scala.collection.mutable.HashMap
 import org.apache.commons.math3.special.Gamma
 import java.util.{Iterator => JIterator}
@@ -23,7 +24,7 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
   val normalizer: Double = nSegments*pseudoCount
   var obsCounts: Int = 0 //total number of observed segments
   var utCount: Int = 0 //number of generated utterance-boundary symbols  
-  val phonCounts: HashMap[SegmentType,Int] = new HashMap //individual counts for observations
+  val phonCounts: HM[SegmentType,Int] = new HM //individual counts for observations
   
   def _predPhon(seg: SegmentType) = {
     val nC = phonCounts.getOrElse(seg, 0)

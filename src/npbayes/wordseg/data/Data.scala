@@ -7,9 +7,11 @@ package npbayes.wordseg.data
 
 
 import npbayes.wordseg
+import npbayes.wordseg.HM
 import npbayes.WordType
 import java.io._
 import scala.collection.mutable.HashMap
+//import scala.collection.mutable.OpenHashMap
 import scala.io.Source
 import scala.util.Random
 import scala.collection.mutable.StringBuilder
@@ -49,10 +51,10 @@ case object UBoundaryNoRule extends Boundary
 */
 
 abstract class Rule
-case object TDel extends Rule
-case object TRel extends Rule
-case object DDel extends Rule
-case object DRel extends Rule
+case object Del1 extends Rule
+case object Rel1 extends Rule
+case object Del2 extends Rule
+case object Rel2 extends Rule
 case object NoRule extends Rule
 
 
@@ -91,10 +93,10 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	var nNotD1 = 0
 	var nD2 = 0
 	var nNotD2 = 0
-	val deleted1: HashMap[RuleContext,Int] = new HashMap
-	val realized1: HashMap[RuleContext,Int] = new HashMap
-	val deleted2: HashMap[RuleContext,Int] = new HashMap
-	val realized2: HashMap[RuleContext,Int] = new HashMap
+	val deleted1: HM[RuleContext,Int] = new HM
+	val realized1: HM[RuleContext,Int] = new HM
+	val deleted2: HM[RuleContext,Int] = new HM
+	val realized2: HM[RuleContext,Int] = new HM
 	
 	val sentences: ArrayBuffer[(Int,Int)] = new ArrayBuffer //(x,y) refers to a sentence spanning the characters from
 	
@@ -126,10 +128,10 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 				  case MISSING1 =>
 				    seqPhones = seqPhones.dropRight(1)
 					seqBoundaries = seqBoundaries.dropRight(2):+WBoundary
-					seqRules = seqRules.dropRight(2):+TDel
+					seqRules = seqRules.dropRight(2):+Del1
 				  case DROP1 =>
 				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
-				    seqRules = seqRules.dropRight(1):+ TRel
+				    seqRules = seqRules.dropRight(1):+ Rel1
 				  case _ =>
 				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
 				    seqRules = seqRules.dropRight(1):+ NoRule				    
@@ -517,7 +519,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	  val word = new WordType(data,sPos, ePos,-1)
 	  val wD = new WordType(data,sPos,ePos,DROPSEG1)
 	  rules(ePos) match {
-	    case TDel =>
+	    case Del1 =>
 	      (word,wD,wD)
 	    case _ =>
 	      (word,word,wD)
@@ -539,7 +541,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	def getWord(sPos: Int, ePos: Int): (WordType,WordType) = {
 	  val word = new WordType(data,sPos, ePos,-1)
 	  rules(ePos) match {
-	    case TDel =>
+	    case Del1 =>
 	      (word,new WordType(data,sPos,ePos,DROPSEG1))
 	    case _ =>
 	      (word,word)
@@ -559,7 +561,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	      	    case NoRule =>
 	      	      res.append(wToS(new WordType(data,sPos-1,cPos,-1),segSep)+wordSeg)
 	      	      inner(cPos+1,cPos+1,res)
-	      	    case TDel =>
+	      	    case Del1 =>
 	      	      res.append(wToS(new WordType(data,sPos-1,cPos,DROPSEG1),segSep)+wordSeg)
 	      	      inner(cPos+1,cPos+1,res)	      	      
 	      	  }
@@ -568,7 +570,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	      	    case NoRule =>
 	      	      res.append(wToS(new WordType(data,sPos-1, cPos,-1),segSep)+"\n")
 	      	      inner(cPos+1,cPos+1,res)
-	      	    case TDel =>
+	      	    case Del1 =>
 	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG1),segSep)+"\n")
 	      	      inner(cPos+1,cPos+1,res)	      	      
 	      	  }
@@ -593,7 +595,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	      	  out.print("0")
 	      	case WBoundary => 
 	      	  rules(cPos) match {
-	      	    case TDel =>
+	      	    case Del1 =>
 	      	      out.print("t")
 	      	    case NoRule =>
 	      	      out.print("1")
@@ -601,7 +603,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	    
 	      	case UBoundary => 
 	      	  rules(cPos) match {
-	      	    case TDel =>
+	      	    case Del1 =>
 	      	      out.print("t")
 	      	    case NoRule =>
 	      	      out.print("1")
@@ -622,22 +624,20 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		var totalDrops = 0;
 		var trueDrops = 0;
 		var correctDrops = 0;
-//		HashMap<ImmutableList<Short>,Integer> proposedLexicon = new HashMap<ImmutableList<Short>,Integer>();	//words in the proposed segmentation
-//		ashMap<ImmutableList<Short>,Integer> trueLexicon = new HashMap<ImmutableList<Short>, Integer>();		//words in the true segmentation
 		var trueStartPos=0
 		var predStartPos=0		
 		for (i <- 1 to boundaries.length-1) {
 		  rules(i) match {
-		    case TDel =>
+		    case Del1 =>
 		      totalDrops+=1
 		    case _ =>
 		  }
 		  goldRules(i) match {
-		    case TDel =>
+		    case Del1 =>
 		      trueDrops+=1
 		    case _ =>
 		  }
-		  correctDrops += { if (goldRules(i)==rules(i) && rules(i)==TDel) 1 else 0}
+		  correctDrops += { if (goldRules(i)==rules(i) && rules(i)==Del1) 1 else 0}
 		  boundaries(i) match {
 		    case NoBoundary => {
 		      goldBoundaries(i) match {

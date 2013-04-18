@@ -2,6 +2,7 @@ package npbayes.wordseg.models
 
 import npbayes.wordseg
 import npbayes.WordType
+import npbayes.wordseg.HM
 import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
@@ -52,11 +53,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      }
 		new CRP[WordType](concentrationUni,discountUni,tlexgen,assumption)
 	}
-	//val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
-	val pypBis: OpenHashMap[WordType,CRP[WordType]] = new OpenHashMap	
+	val pypBis: HM[WordType,CRP[WordType]] = new HM	
  
 
-	val debugCounts: OpenHashMap[WordType,HashMap[WordType,Int]] = new OpenHashMap
 	
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
@@ -217,9 +216,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  res.add((NoBoundary,NoRule),
 	      _noBoundary(context.leftU,context.w1w2U,context.w1w2O,context.rightU))	 
-	  val tRule = if (context.w1O.finalSeg==data.DROPSEG1) TRel else NoRule
+	  val tRule = if (context.w1O.finalSeg==data.DROPSEG1) Rel1 else NoRule
 	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP && !wordseg.wordseg.isAnnealing)    
-		  res.add((WBoundary,TDel),
+		  res.add((WBoundary,Del1),
 		      _boundary(context.leftU,context.w1D,context.w2U,context.w1O,context.w2O,context.rightU))	    
 	  res.add((WBoundary,tRule),
 	      _boundary(context.leftU,context.w1O,context.w2U,context.w1O,context.w2O,context.rightU))
@@ -230,9 +229,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	def _calcFinalHypotheses(context: BigramFinalContext): Categorical[(Boundary,Rule)] = {
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP && !wordseg.wordseg.isAnnealing)
-		  res.add((UBoundary,TDel),
+		  res.add((UBoundary,Del1),
 		      _ubProb(context.leftU,context.wD,context.wO))
-	  val tRule = if (context.wO.lastSeg==data.DROPSEG1) TRel else NoRule
+	  val tRule = if (context.wO.lastSeg==data.DROPSEG1) Rel1 else NoRule
 	  res.add((UBoundary,tRule),
 	      _ubProb(context.leftU,context.wO,context.wO))
 	  assert(res.partition>0)
@@ -249,12 +248,12 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      b match {
 	        case WBoundary =>
 	          r match {
-	            case TDel =>
+	            case Del1 =>
 		          _logProbTrack += math.log(update(leftU,w1D)*toSurface(w1D,w1O,w2U))
 		          data.addTransformation(w1D, w1U, w2U)		          
 		          _logProbTrack += math.log(update(w1D,w2U)*toSurface(w2U,w2O,rightU))
 		          _logProbTrack += math.log(update(w2U,rightU)) //*toSurface(rightU,rightO,null))
-	            case NoRule | TRel =>
+	            case NoRule | Rel1 =>
 	              _logProbTrack += math.log(update(leftU,w1O)*toSurface(w1O,w1O,w2U))
 	              data.addTransformation(w1O, w1O, w2U)	              
 	              _logProbTrack += math.log(update(w1O,w2U)*toSurface(w2U,w2O,rightU))
@@ -266,11 +265,11 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      }
 	    case BigramFinalContext(leftU,wO,wU,wD) =>
 	          r match {
-	            case TDel =>
+	            case Del1 =>
 	            	_logProbTrack += math.log(update(leftU,wD)*toSurface(wD,wO,data.UBOUNDARYWORD))
 	            	data.addTransformation(wD,wO,data.UBOUNDARYWORD)	            	
 	            	_logProbTrack += math.log(update(wD,data.UBOUNDARYWORD))
-	            case TRel | NoRule =>
+	            case Rel1 | NoRule =>
 	            	_logProbTrack += math.log(update(leftU,wO)*toSurface(wO,wO,data.UBOUNDARYWORD))
 	            	data.addTransformation(wO,wO,data.UBOUNDARYWORD)
 	          		_logProbTrack += math.log(update(wO,data.UBOUNDARYWORD))	              
@@ -534,16 +533,16 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 
 	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  res.add((UBoundary,TDel), predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
-	  val tRule = if (w1O.finalSeg==data.DROPSEG1) TRel else NoRule
+	  res.add((UBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
+	  val tRule = if (w1O.finalSeg==data.DROPSEG1) Rel1 else NoRule
 	  res.add((UBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
 	  res
 	}
 	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType, w2U: WordType, w2O: WordType, rightU: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  res.add((WBoundary,TDel), predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
+	  res.add((WBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
-      val tRule = if (w1O.finalSeg==data.DROPSEG1) TRel else NoRule			  				 
+      val tRule = if (w1O.finalSeg==data.DROPSEG1) Rel1 else NoRule			  				 
 	  res.add((WBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
 	  res

@@ -255,11 +255,11 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  res.add((NoBoundary,NoRule),
 	      _noBoundary(w1w2U,w1w2O,rU,rO))
 	  if (wordseg.wordseg.dropInferenceMode != IGNOREDROP && !wordseg.wordseg.isAnnealing) {
-		  res.add((WBoundary,TDel),
+		  res.add((WBoundary,Del1),
 				  _boundary(w1D,w2U,w1O,w2O,rU,rO))
 	  }
 	  val tRule = if (w1O.lastSeg==data.DROPSEG1)
-		  			TDel
+		  			Del1
 		  		  else
 		  		    NoRule
 	  res.add((WBoundary,tRule),
@@ -271,10 +271,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	def _calcFinalHypotheses(w1O: WordType, w1D: WordType): Categorical[(Boundary,Rule)] = {
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  if (wordseg.wordseg.dropInferenceMode != IGNOREDROP && !wordseg.wordseg.isAnnealing) {
-		  res.add((UBoundary,TDel),
+		  res.add((UBoundary,Del1),
 		      _pronProb(w1D, w1O,data.UBOUNDARYWORD,data.UBOUNDARYWORD))
 	  }
-	  val tRule = if (w1O.lastSeg==data.DROPSEG1) TDel else NoRule
+	  val tRule = if (w1O.lastSeg==data.DROPSEG1) Del1 else NoRule
 	  res.add((UBoundary,tRule),
 	      _pronProb(w1O,w1O,data.UBOUNDARYWORD,data.UBOUNDARYWORD))
 	  assert(res.partition>0)
@@ -302,10 +302,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    	    update(w1w2U)
 	    	  case WBoundary => 
 	    	    r match {
-	    	      case TDel =>
+	    	      case Del1 =>
 	    	        update(w1D)
 	    	        data.addTransformation(w1O, w1D, w2U)
-	    	      case TRel | NoRule =>
+	    	      case Rel1 | NoRule =>
 	    	        update(w1O)
 	    	        data.addTransformation(w1O,w1O,w2U)
 	    	    }
@@ -314,10 +314,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    	if (isFinal) nUtterances+=1
 	    case UnigramFinalContext(w1O,w1U,w1D) =>
 	      r match {
-	        case TDel =>
+	        case Del1 =>
 	          update(w1D)
 	          data.addTransformation(w1O, w1D, data.UBOUNDARYWORD)	          
-	        case TRel | NoRule =>
+	        case Rel1 | NoRule =>
 	          update(w1O)
      		  data.addTransformation(w1O, w1O, data.UBOUNDARYWORD)
 	      }
@@ -366,16 +366,16 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 
   def __reseatProbsFinal(w1D: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  val tRule = if (w1O.finalSeg==data.DROPSEG1) TRel else NoRule
-	  res.add((UBoundary,TDel), pypUni(w1D)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
+	  val tRule = if (w1O.finalSeg==data.DROPSEG1) Rel1 else NoRule
+	  res.add((UBoundary,Del1), pypUni(w1D)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
 	  res.add((UBoundary,tRule), pypUni(w1O)*toSurface(w1O,w1O,data.UBOUNDARYWORD))
 	  res
 	}
   
   def __reseatProbs(w1D: WordType, w1O: WordType,rU: WordType, rO: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  val tRule = if (w1O.finalSeg==data.DROPSEG1) TRel else NoRule
-	  res.add((WBoundary,TDel), pypUni(w1D)*toSurface(w1D, w1O,rU))
+	  val tRule = if (w1O.finalSeg==data.DROPSEG1) Rel1 else NoRule
+	  res.add((WBoundary,Del1), pypUni(w1D)*toSurface(w1D, w1O,rU))
 	  res.add((WBoundary,tRule), pypUni(w1O)*toSurface(w1O,w1O,rU))
 	  res
 	}
