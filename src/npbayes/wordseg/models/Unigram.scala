@@ -293,6 +293,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  val (b,r) = br
 	  val hasChanged = boundaries(pos)!=b
 	  data.setBoundary(pos, b)
+	  data.setRule(pos, r)
 	  context match {
 	    case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO) =>
 	      	val isFinal = rU==data.UBOUNDARYWORD 
@@ -308,6 +309,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    	        update(w1O)
 	    	        data.addTransformation(w1O,w1O,w2U)
 	    	    }
+	    	    update(w2U)
 	    	}
 	    	if (isFinal) nUtterances+=1
 	    case UnigramFinalContext(w1O,w1U,w1D) =>

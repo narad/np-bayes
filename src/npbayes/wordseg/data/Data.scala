@@ -21,6 +21,7 @@ import npbayes.wordseg.INFERDROP
 import scala.collection.mutable.ArrayBuffer
 import npbayes.WordType
 import npbayes.WordType
+import npbayes.WordType
 
 
 
@@ -80,7 +81,6 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	val _random = new Random()
 	//Special Characters
 	val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
-	val UBOUNDARYWORD=segToWord(SymbolTable(UBOUNDARYSYMBOL))
 	val DROPSEG1=SymbolTable(DROP1)
 	val DROPSEG2=SymbolTable(DROP2)
 	def isConsonant = wordseg.wordseg.isConsonant
@@ -98,11 +98,12 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	
 	val sentences: ArrayBuffer[(Int,Int)] = new ArrayBuffer //(x,y) refers to a sentence spanning the characters from
 	
+	
 		/**
 	 * Initialize the data and goldBoundaries
 	 */
 	val (data,goldBoundaries,goldRules) = init
-
+	val UBOUNDARYWORD=new WordType(data,0,1,-1) //always prefix corpus with an additional boundary symbol
 	
 	var boundaries = randomBoundaries(wordseg.wordseg.binitProb).toArray
 	var rules = Array.fill[Rule](boundaries.length)(NoRule)
@@ -121,13 +122,17 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 					stringPos+=1
 				}
 				//last symbole is Boundary, check for deleted symbols
-				if (SymbolTable(seqPhones.last)==MISSING1) {
-					seqPhones = seqPhones.dropRight(1)
+				SymbolTable(seqPhones.last) match {
+				  case MISSING1 =>
+				    seqPhones = seqPhones.dropRight(1)
 					seqBoundaries = seqBoundaries.dropRight(2):+WBoundary
 					seqRules = seqRules.dropRight(2):+TDel
-				} else {
-					seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
-					seqRules = seqRules.dropRight(1):+NoRule
+				  case DROP1 =>
+				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
+				    seqRules = seqRules.dropRight(1):+ TRel
+				  case _ =>
+				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
+				    seqRules = seqRules.dropRight(1):+ NoRule				    
 				}
 			}
 	       // adjust for word-boundaries --- last NoBoundary is in fact a word-boundary			
@@ -138,9 +143,6 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 			startPos=stringPos
 		}
 		for (l <- Source.fromInputStream(new FileInputStream(fName), "utf-8").getLines) processLine(l)
-//		val phones = new Builder[Int]
-//		for (x <- seqPhones)
-//		  phones.add(x)
 		(seqPhones.toArray,seqBoundaries.toArray,seqRules.toArray)
 	}
 
@@ -320,7 +322,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 				case WBoundary | NoBoundary => seqBoundaries=seqBoundaries:+{
 					if (_random.nextDouble>boundProb)
 						NoBoundary 
-					else (_random.nextDouble<dropProb)
+					else 
 						WBoundary
 				}
 			}
@@ -397,7 +399,9 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	
 	def setBoundary(pos: Int, b: Boundary): Unit = 
 	  boundaries(pos)= b
-	
+
+	def setRule(pos: Int, b: Rule): Unit = 
+	  rules(pos)= b	  
 	  
 	def delModelProb: Double = 
 	  if (wordseg.wordseg.dropInferenceMode==IGNOREDROP)
@@ -648,7 +652,6 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		    case WBoundary => {
 		      totalBoundaries+=1
 		      totalTokens+=1
-		      totalDrops+=1
 		      goldBoundaries(i) match {
 		        case WBoundary => {
 		          trueBoundaries+=1

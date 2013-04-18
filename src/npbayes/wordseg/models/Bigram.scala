@@ -17,6 +17,7 @@ import npbayes.wordseg.BIUNLEARNED
 import npbayes.wordseg.BILEARNEDVOWELS
 import npbayes.wordseg.BILEARNED
 import optimizer.samplers1D
+import scala.collection.mutable.OpenHashMap
 abstract class BContext
 
 case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: WordType, val w1D: WordType,
@@ -33,7 +34,6 @@ object Bigram {
 class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double=0,concentrationBi: Double, discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
     		  val dropSeg: String = "KLRK", val dropInd: String = "KLRK",val dropProb: Double = 0.0,
     		  val contextModel: DeletionModel, val lexgen: LexGenerator) extends WordsegModel {
-  //val lexgen: PosteriorPredictive[WordType]) extends WordsegModel {
 	require(0<=discountUni && discountUni<1)
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	
@@ -52,10 +52,11 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      }
 		new CRP[WordType](concentrationUni,discountUni,tlexgen,assumption)
 	}
-	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
+	//val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap
+	val pypBis: OpenHashMap[WordType,CRP[WordType]] = new OpenHashMap	
  
 
-	val debugCounts: HashMap[WordType,HashMap[WordType,Int]] = new HashMap
+	val debugCounts: OpenHashMap[WordType,HashMap[WordType,Int]] = new OpenHashMap
 	
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
@@ -156,8 +157,10 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      	  inner(cPos+1,cPos+1)
 	      	}
 	  }
-	  if (goldBoundaries)
+	  if (goldBoundaries) {
 	    data.boundaries=data.goldBoundaries.clone
+	    data.rules=data.goldRules.clone
+	  }
 	  inner(1,1)
 	}	
 	
@@ -441,8 +444,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  var res = "alpha0 "+pypUni.concentration
 	  if (false)//(!wordseg.wordseg.coupled)
 		  for (w <- pypBis.keySet) {
-		    val ws = wToS(w)
-		    res += " alpha_"+ws+" "+pypBis(w).concentration
+//		    val ws = wToS(w)
+//		    res += " alpha_"+ws+" "+pypBis(w).concentration
 		  }
 	  else {
 //	    val he = pypBis.head
@@ -501,7 +504,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}
 	
 	def gibbsSweep(anneal: Double=1.0): Double = {
-	  for (i: Int <- shuffle(1 until boundaries.length)) {
+//	  for (i: Int <- shuffle(1 until boundaries.length)) {
+	  for (i: Int <- 1 until boundaries.length) {	    
 		  resample(i,anneal)
 	  }
 	  logProb
@@ -528,17 +532,19 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 
 	}
 
-	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType): Categorical[Boundary] = {
-	  val res = new Categorical[Boundary]
-	  res.add(UBoundaryDrop1, predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
-	  res.add(UBoundaryNoDrop1, predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
+	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
+	  val res = new Categorical[(Boundary,Rule)]
+	  res.add((UBoundary,TDel), predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
+	  val tRule = if (w1O.finalSeg==data.DROPSEG1) TRel else NoRule
+	  res.add((UBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
 	  res
 	}
-	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType, w2U: WordType, w2O: WordType, rightU: WordType): Categorical[Boundary] = {
-	  val res = new Categorical[Boundary]
-	  res.add(WBoundaryDrop1, predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
+	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType, w2U: WordType, w2O: WordType, rightU: WordType): Categorical[(Boundary,Rule)] = {
+	  val res = new Categorical[(Boundary,Rule)]
+	  res.add((WBoundary,TDel), predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
-	  res.add(WBoundaryNoDrop1, predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O,w2U)*
+      val tRule = if (w1O.finalSeg==data.DROPSEG1) TRel else NoRule			  				 
+	  res.add((WBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
 	  res
 	}
@@ -547,7 +553,8 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	 * only resample words, but determine drops
 	 */
 	def gibbsSweepWords(anneal: Double=1.0): Double = {
-	  for (i: Int <- shuffle(1 until boundaries.length)) {
+//   for (i: Int <- shuffle(1 until boundaries.length)) {
+	  for (i: Int <- 1 until boundaries.length) {
 	  	  resampleWords(i,anneal)
 	  }
 	  logProb

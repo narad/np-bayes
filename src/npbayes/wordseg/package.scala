@@ -1,5 +1,8 @@
 package npbayes
 
+import npbayes.wordseg.data.SymbolTable
+import scala.collection.mutable.OpenHashMap
+
 /**
  * taken from Percy Liangs TEA utilities
  */
@@ -56,6 +59,18 @@ class SubArray[A](private val array:Array[A], private val start:Int, private val
 
 class WordType(private val array:Array[Int],private val start:Int, private val end:Int, val finalSeg:Int = -1) extends 
 	SubArray[Int](array,start,end) {
+  override def hashCode = {
+    var sum = 0
+    var i = start
+    while (i < end) {
+      sum = (sum * 29 + array(i).hashCode)
+      i += 1
+    }
+    if (finalSeg != -1)
+      sum = (sum * 29 + finalSeg.hashCode)
+    sum
+  }  
+  
   override def length = {
     if (finalSeg == -1)
       end-start
@@ -74,7 +89,7 @@ class WordType(private val array:Array[Int],private val start:Int, private val e
   }
   
   def lastSeg: Int =
-    array(start+length-1)
+    this(length-1)
   
   def allButLast: WordType = {
     if (finalSeg == -1)
@@ -82,9 +97,43 @@ class WordType(private val array:Array[Int],private val start:Int, private val e
     else
       new WordType(array,start,end)
   }
+  override def toString = {
+    val buf = new StringBuilder
+    var i = start
+    while (i<end) {
+      if (i > start) buf += ' '
+      buf.append(SymbolTable(array(i)))
+      i += 1
+    }
+    if (finalSeg == -1)
+      "("+buf.toString+","+hashCode+")"
+    else {
+      buf.append(' ')
+      buf.append(SymbolTable(finalSeg))
+      "("+buf.toString+","+hashCode+")"
+    }
+  }  
+  override def equals(_that:Any) : Boolean = {
+    _that match {
+      case that : WordType =>
+        if (this.length == that.length) {
+          var i=0
+          while (i < this.length) {
+            if (!(this(i) equals that(i)))
+              return false
+            i += 1
+          }
+          true
+        }
+        else
+          false
+      case _ => false
+    }
+  }  
 }
 
 package object wordseg {
+    type HM[A,B] = OpenHashMap[A,B] //which HashMap to use
 	val DEBUG = false /** makes everything slow because of checks!! */
 	/*
 	 * Sharon Goldwater's annealing scheme
