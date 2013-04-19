@@ -3,10 +3,10 @@ package npbayes.wordseg.lexgens
 import npbayes.distributions.PosteriorPredictive
 import npbayes.WordType
 import npbayes.wordseg.data.SegmentType
-import npbayes.wordseg.HM
-import scala.collection.mutable.HashMap
+import java.util.HashMap
 import org.apache.commons.math3.special.Gamma
 import java.util.{Iterator => JIterator}
+import npbayes.wordseg.data.SymbolTable
 
 
 /**
@@ -20,14 +20,15 @@ import java.util.{Iterator => JIterator}
 
 class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, val pseudoCount: Double = 0.01, val vowelConstraint: Boolean = false) extends PosteriorPredictive[WordType] {
   def isVowel = npbayes.wordseg.wordseg.isVowel
-  val WB: SegmentType = -1000
+  val WB: SegmentType = SymbolTable.nSymbols+1
   val normalizer: Double = nSegments*pseudoCount
   var obsCounts: Int = 0 //total number of observed segments
   var utCount: Int = 0 //number of generated utterance-boundary symbols  
-  val phonCounts: HM[SegmentType,Int] = new HM //individual counts for observations
+//  val phonCounts: HashMap[SegmentType,Integer] = new HashMap //individual counts for observations
+  val phonCounts: Array[SegmentType] = Array.fill(SymbolTable.nSymbols+2)(0)
   
   def _predPhon(seg: SegmentType) = {
-    val nC = phonCounts.getOrElse(seg, 0)
+    val nC: Int = phonCounts(seg) 
     (nC+pseudoCount)/(obsCounts+normalizer)
   }
   
@@ -61,20 +62,14 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
   }
   
   def _addPhon(s: SegmentType) = {
-    val old = phonCounts.getOrElse(s, 0)
-    phonCounts.put(s,old+1)
+	phonCounts(s)+=1
     obsCounts+=1
   }
   
   def _removePhon(s: SegmentType) = {
-    val old = phonCounts.get(s) match {
-      case Some(x) => x
-      case _ => throw new Error("can't remove "+s+" in BigramLearned._removePhone")
-    }
-    if (old-1==0)
-      phonCounts.remove(s)
-    else
-      phonCounts.put(s,old-1)
+	phonCounts(s)-=1
+	if (phonCounts(s)<0)
+      throw new Error("can't remove "+s+" in BigramLearned._removePhone")
     obsCounts-=1
   }
 
@@ -127,10 +122,12 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
    * second part is the little Bigram-model trickery for Utterance Boundaries
    */
   override def logProb = {
-    Gamma.logGamma(normalizer)-Gamma.logGamma(obsCounts+normalizer)+
-    	{ for (count: Int <- phonCounts.values.toList)
-    		yield (Gamma.logGamma(count+pseudoCount)-Gamma.logGamma(pseudoCount)) }.sum +  
-    math.log(pUB)*utCount +
-    math.log(1-pUB)*phonCounts.getOrElse(WB, 0)
-  }
+    var result: Double = Gamma.logGamma(normalizer)-Gamma.logGamma(obsCounts+normalizer)
+    var i = 0
+    while (i<phonCounts.length) {
+      result +=Gamma.logGamma(phonCounts(i)+pseudoCount)-Gamma.logGamma(pseudoCount)
+      i+=1
+    }
+    result + math.log(pUB)*utCount + math.log(1-pUB)*phonCounts(WB)
+ }
 }

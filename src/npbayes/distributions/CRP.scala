@@ -1,9 +1,7 @@
 package npbayes.distributions
 
 
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.OpenHashMap
-import scala.collection.mutable.LinkedList
+import java.util.HashMap
 import scala.util.Random
 
 import org.apache.commons.math3.special.Gamma
@@ -134,14 +132,26 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
   val _random = new Random()
   
   
-  //val labelTabels: HM[T,TypeCount] = new HM
-  val labelTabels: HM[T,TypeCount] = new HM
+  val labelTabels: HashMap[T,TypeCount] = new HashMap
   val emptyCount = new TypeCount
   
-  def _oCount(o: T): Int = labelTabels.getOrElse(o, emptyCount).nCust//hmObsCounts.getOrElse(o, 0)
+  def _oCount(o: T): Int = {
+    val tResult = labelTabels.get(o)
+    if (tResult == null)
+      0
+    else
+      tResult.nCust
+  } 
+
   var _oCount = 0
-  def _tCount(o: T): Int = labelTabels.getOrElse(o, emptyCount).nTables//hmTableCounts.getOrElse(o, 0)
-  
+
+  def _tCount(o: T): Int = {
+	val tResult = labelTabels.get(o)
+    if (tResult == null)
+      0
+    else
+      tResult.nTables    
+  }   
   
   var _tCount = 0
   
@@ -161,10 +171,12 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
     def sanityCheck: Boolean = {
       var nn=0
       var tt=0
-      for ((word,counts) <- labelTabels.toList) {
-        assert(counts.sanity)
-        nn+=counts.nCust
-        tt+=counts.nTables
+      val cIter = labelTabels.values.iterator
+      while (cIter.hasNext) {
+        val c = cIter.next
+        assert(c.sanity)
+        nn+=c.nCust
+        tt+=c.nTables
       }
       assert(nn==_oCount)
       assert(tt==_tCount)
@@ -195,14 +207,16 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       0.0
     else { 
 	    var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
-	    for (tokenCount <- labelTabels.values) {
+	    val tcIter = labelTabels.values.iterator
+	    while (tcIter.hasNext) {
+	      val tokenCount = tcIter.next()
 	      val iter : JIterator[JEntry[Int,Int]] = tokenCount.nCust_nTables.entrySet().iterator()
 	      while (iter.hasNext()) {
 	        val entry = iter.next()
 	        val nC = entry.getKey()
 	        val nT = entry.getValue()
 	        res += ((Gamma.logGamma(nC-discount)-Gamma.logGamma(1-discount)))*nT
-	      }
+	      }	      
 	    }
 	    if (discount==0)
 	      res += _tCount*math.log(concentration)
@@ -232,36 +246,55 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       val p = _random.nextDouble*(oldT+newT)
       _oCount+=1
 	  if (p < oldT) {
-	    val nCust = labelTabels(obs).sitAtOld(p,discount)
+	    val nCust = labelTabels.get(obs).sitAtOld(p,discount)
 	    assert(nCust>0)
 	    nCust/(_oCount-1+concentration)
 	  } else {
-	    labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
+	    val tmp = labelTabels.get(obs)
+	    if (tmp==null) {
+	      val tmp2 = new TypeCount
+	      tmp2.sitAtNew
+	      labelTabels.put(obs,tmp2)
+	    } else {
+	      tmp.sitAtNew
+	    }
 	    val mProb = base.update(obs)
 	    _tCount+=1
 	    concentration*mProb/(_oCount-1+concentration)
 	  }
      case MINPATH => 
-       if (_oCount(obs)==0) { 
-         labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
-    	    base.update(obs)
-
+       if (_oCount(obs)==0) {
+         val tmp = labelTabels.get(obs)
+         if (tmp==null) {
+           val tmp2 = new TypeCount
+           tmp2.sitAtNew
+           labelTabels.put(obs,tmp2)
+         } else {
+           tmp.sitAtNew
+         }
+    	 base.update(obs)
          _tCount += 1
          _oCount+=1
          _pSitAtNew(obs)
        } else {
          val res = _pSitAtOld(obs)
          _oCount+=1
-    	 labelTabels(obs).sitAtOld(0, discount)
+    	 labelTabels.get(obs).sitAtOld(0, discount)
     	 res
        }
      case MAXPATH =>
        val res = _pSitAtNew(obs)
-       	    base.update(obs)
-
-       labelTabels.getOrElseUpdate(obs, new TypeCount).sitAtNew
-         _tCount += 1
-         _oCount += 1
+       base.update(obs)
+       val tmp = labelTabels.get(obs)
+       if (tmp==null) {
+         val tmp2 = new TypeCount
+         tmp2.sitAtNew
+         labelTabels.put(obs,tmp2)
+       } else {
+         tmp.sitAtNew
+       }
+       _tCount += 1
+       _oCount += 1
        res
     } 
   }
@@ -276,10 +309,11 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
    * @return	probability of adding this observation back in
    */
   def remove (obs: T) = {
-    val counts = labelTabels(obs)
+    val counts = labelTabels.get(obs)
     _oCount-=1
     val r = (_random.nextDouble*counts.nCust).toInt
-    val remCusts = labelTabels(obs).remove(r)
+//    val remCusts = labelTabels(obs).remove(r)
+    val remCusts = counts.remove(r)
     if (remCusts==0) {
       val pProb = base.remove(obs)
       _tCount-=1

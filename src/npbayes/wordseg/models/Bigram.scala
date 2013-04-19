@@ -2,12 +2,12 @@ package npbayes.wordseg.models
 
 import npbayes.wordseg
 import npbayes.WordType
-import npbayes.wordseg.HM
 import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
-import scala.collection.mutable.HashMap
+//import scala.collection.mutable.HashMap
+import java.util.HashMap
 import java.io.PrintStream
 import npbayes.wordseg.IGNOREDROP
 import npbayes.Utils
@@ -29,10 +29,10 @@ case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: 
 case class BigramFinalContext(val leftU: WordType, val wO: WordType, val wU: WordType, val wD: WordType) extends BContext					  
 
 object Bigram {
-  val FAITHFUL = false
+  val FAITHFUL = true
 }
 
-class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double=0,concentrationBi: Double, discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
+class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Double=0,var concentrationBi: Double, var discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
     		  val dropSeg: String = "KLRK", val dropInd: String = "KLRK",val dropProb: Double = 0.0,
     		  val contextModel: DeletionModel, val lexgen: LexGenerator) extends WordsegModel {
 	require(0<=discountUni && discountUni<1)
@@ -53,7 +53,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	      }
 		new CRP[WordType](concentrationUni,discountUni,tlexgen,assumption)
 	}
-	val pypBis: HM[WordType,CRP[WordType]] = new HM	
+	val pypBis: HashMap[WordType,CRP[WordType]] = new HashMap	
  
 
 	
@@ -64,25 +64,42 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  data.evaluate.toString
 
 	def update(precedingW: WordType, word: WordType): Double = {
-	  pypBis.getOrElseUpdate(precedingW, new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)).update(word)
+	  val tRest = pypBis.get(precedingW)
+	  if (tRest==null) {
+	    val newRest = new CRP[WordType](concentrationBi,discountBi,pypUni,assumption)
+	    val res = newRest.update(word)
+	    pypBis.put(precedingW, newRest)
+	    res
+	  } else {
+	    tRest.update(word)
+	  }
 	}
 
 	def removeWrap(precedingW: WordType, word: WordType): Double = {
-	  val res = pypBis(precedingW).remove(word)
-	  if (pypBis(precedingW).isEmpty) {
+	  val tRest = pypBis.get(precedingW)
+	  val res = tRest.remove(word)
+	  if (tRest.isEmpty) {
 	    pypBis.remove(precedingW)
 	  }
 	  res
 	}
 	
 	def sanity: Boolean = {
-	 (for (pypW <- pypBis.values.toList)
+	  val resIter = pypBis.values.iterator
+	  val res = 0.0
+	  while (resIter.hasNext) {
+	    val pypW = resIter.next()
+	    assert(pypW.sanityCheck)	    
+	  }
+	  assert(pypUni.sanityCheck)
+	  true
+/*	 (for (pypW <- pypBis.values.toList) //TODO convert check counts
 	    yield {
 		assert(pypW.sanityCheck)
 	    pypW.sanityCheck}).reduce(_&&_)&&{assert(pypUni.sanityCheck); 
 	    pypUni.sanityCheck} &&
 	    pypUni._tCount == pypUni.base.asInstanceOf[MonkeyBigram]._nWords + pypUni.base.asInstanceOf[MonkeyBigram]._nUBS
-	    pypUni._oCount == {for (w <- pypBis.values.toList) yield w._tCount}.sum
+    	pypUni._oCount == {for (w <- pypBis.values.toList) yield w._tCount}.sum*/
 	 }
 
 	def toSurface(u: WordType, o:WordType,rU: WordType): Double = {
@@ -164,7 +181,13 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	}	
 	
 	
-	def predictive(word: WordType, w2: WordType): Double = pypBis.getOrElse(word,pypUni).predProb(w2)
+	def predictive(word: WordType, w2: WordType): Double = {
+	  val tmpRes = pypBis.get(word)
+	  if (tmpRes==null)
+	    pypUni.predProb(w2)
+	  else
+	    tmpRes.predProb(w2)
+	}
 	
 	/**
 	 * performs the intermediate updates when calculating probabilities (dpseg2 doesn't do that)
@@ -375,13 +398,15 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 		        else
 		          0
 		      var res: Double = 0
-		      for (bCRP <- pypBis.values)
-		        res += bCRP.logProbSeating(alpha)
+		      val bCRPit = pypBis.values.iterator
+		      while (bCRPit.hasNext) {
+		        res += bCRPit.next().logProbSeating(alpha)
+		      }
 		      assert(res!=Double.NegativeInfinity)
 		      res + logPrior
 		  } 
 	
-	      val oldSharedBigramAlpha = pypBis.head._2.concentration
+	      val oldSharedBigramAlpha = concentrationBi 
 	      val newSharedBigramAlpha = wordseg.wordseg.hsample match {
 	        case "mh" =>
 	          samplers1D.mhsample(oldSharedBigramAlpha, logpdfBi, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)
@@ -401,12 +426,16 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 //	           System.err.println(tmpx0)
 	         }
 	         tmpx0	          
-	      } 
-	      for (bi <- pypBis.values) {
-	        bi.setConcentration(newSharedBigramAlpha)
 	      }
+	      val biIt = pypBis.values.iterator
+	      while (biIt.hasNext) {
+	        biIt.next().setConcentration(newSharedBigramAlpha)
+	      }
+	      concentrationBi = newSharedBigramAlpha
       } else {
-        for (bCRP <- pypBis.values) {
+        val bCRPIt = pypBis.values.iterator
+        while(bCRPIt.hasNext) {
+          val bCRP = bCRPIt.next()
         	def logpdf(alpha: Double): Double = {
 		      var result = 0
 		      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
@@ -435,22 +464,11 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
       }
 	}	  
 	
-//	def hyperParam: String =
-//	  "alpha0 "+pypUni.concentration+" alpha1 "+pypBis.values.first.concentration
 	
 	
 	def hyperParam: String = {
 	  var res = "alpha0 "+pypUni.concentration
-	  if (false)//(!wordseg.wordseg.coupled)
-		  for (w <- pypBis.keySet) {
-//		    val ws = wToS(w)
-//		    res += " alpha_"+ws+" "+pypBis(w).concentration
-		  }
-	  else {
-//	    val he = pypBis.head
-	    res += " alpha1 "+pypBis.head._2.concentration
-	  }
-//	  "alpha0 "+pypUni.concentration+" alpha1 "+pypBis.values.first.concentration
+      res += " alpha1 "+concentrationBi
 	  res
 	}
 	  
@@ -461,7 +479,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  val lp1 = pypUni.base.logProb
 	  val lp2 = pypUni.logProbSeating(alpha0)
 	  var lp3 = 0.0
-	  for (pypW <- pypBis.values.toList) {
+	  val pypWIt = pypBis.values.iterator
+	  while (pypWIt.hasNext) {
+	    val pypW = pypWIt.next()
 	    if (wordseg.DEBUG)
 	    	assert(pypW.sanityCheck)
 	    lp3 += pypW.logProbSeating(alpha1)
@@ -469,12 +489,15 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  val lp4 = if (wordseg.wordseg.hyperparam)
 	    if (wordseg.wordseg.coupled)
 	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)+
-	      Utils.lgammadistShapeRate(pypBis.head._2.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
-	    else
-	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)+
-	      {for (bCRP <- pypBis.values)
-	        yield Utils.lgammadistShapeRate(bCRP.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
-	      }.toList.sum
+	      Utils.lgammadistShapeRate(concentrationBi,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	    else {
+	      var tRes = Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      val bCRPIt = pypBis.values.iterator
+	      while (bCRPIt.hasNext) {
+	        tRes += Utils.lgammadistShapeRate(bCRPIt.next().concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      }
+	      tRes
+	    }
 	  else
 	    0
 	  if (wordseg.DEBUG)
@@ -486,7 +509,9 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  val lp1 = pypUni.base.logProb
 	  val lp2 = pypUni.logProbSeating
 	  var lp3 = 0.0
-	  for (pypW <- pypBis.values.toList) {
+	  val pypWIt = pypBis.values.iterator
+	  while (pypWIt.hasNext) {
+	    val pypW = pypWIt.next()
 	    if (wordseg.DEBUG)
 	    	assert(pypW.sanityCheck)
 	    lp3 += pypW.logProbSeating
@@ -496,7 +521,7 @@ class Bigram(val corpusName: String,concentrationUni: Double,discountUni: Double
 	  lp1 + lp2 + lp3 + data.delModelProb + 
 	  { if (wordseg.wordseg.hyperparam && wordseg.wordseg.shape != -1)
 		  Utils.lgammadistShapeRate(pypUni.concentration, wordseg.wordseg.shape, wordseg.wordseg.rate)+
-		  Utils.lgammadistShapeRate(pypBis.values.head.concentration, wordseg.wordseg.shape, wordseg.wordseg.rate)
+		  Utils.lgammadistShapeRate(concentrationBi, wordseg.wordseg.shape, wordseg.wordseg.rate)
 		else
 		  0
 	  }

@@ -7,7 +7,6 @@ package npbayes.wordseg.data
 
 
 import npbayes.wordseg
-import npbayes.wordseg.HM
 import npbayes.WordType
 import java.io._
 import scala.collection.mutable.HashMap
@@ -37,26 +36,12 @@ case object NoBoundary extends Boundary
 case object WBoundary extends Boundary
 case object UBoundary extends Boundary
 
-/*
-case object WBoundaryDrop1 extends Boundary
-case object WBoundaryNoDrop1 extends Boundary
-case object WBoundaryDrop2 extends Boundary
-case object WBoundaryNoDrop2 extends Boundary
-case object WBoundaryNoRule extends Boundary
-case object UBoundaryDrop1 extends Boundary
-case object UBoundaryNoDrop1 extends Boundary
-case object UBoundaryDrop2 extends Boundary
-case object UBoundaryNoDrop2 extends Boundary
-case object UBoundaryNoRule extends Boundary
-*/
-
 abstract class Rule
 case object Del1 extends Rule
 case object Rel1 extends Rule
 case object Del2 extends Rule
 case object Rel2 extends Rule
 case object NoRule extends Rule
-
 
 abstract class RuleContext
 case class SimpleRContext(rC: CoarseType) extends RuleContext
@@ -93,10 +78,10 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	var nNotD1 = 0
 	var nD2 = 0
 	var nNotD2 = 0
-	val deleted1: HM[RuleContext,Int] = new HM
-	val realized1: HM[RuleContext,Int] = new HM
-	val deleted2: HM[RuleContext,Int] = new HM
-	val realized2: HM[RuleContext,Int] = new HM
+	val deleted1: HashMap[RuleContext,Int] = new HashMap
+	val realized1: HashMap[RuleContext,Int] = new HashMap
+	val deleted2: HashMap[RuleContext,Int] = new HashMap
+	val realized2: HashMap[RuleContext,Int] = new HashMap
 	
 	val sentences: ArrayBuffer[(Int,Int)] = new ArrayBuffer //(x,y) refers to a sentence spanning the characters from
 	
@@ -132,6 +117,13 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 				  case DROP1 =>
 				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
 				    seqRules = seqRules.dropRight(1):+ Rel1
+				  case MISSING2 =>
+				    seqPhones = seqPhones.dropRight(1)
+					seqBoundaries = seqBoundaries.dropRight(2):+WBoundary
+					seqRules = seqRules.dropRight(2):+Del2
+				  case DROP2 =>
+				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
+				    seqRules = seqRules.dropRight(1):+ Rel2				    
 				  case _ =>
 				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
 				    seqRules = seqRules.dropRight(1):+ NoRule				    
@@ -227,6 +219,38 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		  }
 	    case _ =>
 	  }     
+	}
+	
+	def removeNoDrop(hm: HashMap[RuleContext,Int], lSegment: SegmentType, rSegment: SegmentType) = {
+	  wordseg.wordseg.dropInferenceMode match {
+	    case INFERDROP(_,_) =>
+		  delModeLType match {
+		    case CVPFollows =>
+		      val old = hm.get(SimpleRContext(segmentToType(rSegment)))
+			  old match {
+			    case Some(x) =>
+			      if (x-1==0)
+			        hm.remove(SimpleRContext(segmentToType(rSegment)))
+			      else
+			    	hm.put(SimpleRContext(segmentToType(rSegment)),x-1)
+			    case None =>
+			      throw new Error("In removeDrop("+rSegment+")")
+			  }
+		    case CVPLeftRight =>
+		      val old = hm.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+			  old match {
+			    case Some(x) =>
+			      if (x-1==0)
+			        hm.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+			      else
+			    	hm.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
+			    case None =>
+			      throw new Error("In removeDrop("+lSegment+","+rSegment+")")
+			  }
+		    case _ =>	      
+		  }
+	    case _ =>
+	  }	  
 	}
 	
 	def removeNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {

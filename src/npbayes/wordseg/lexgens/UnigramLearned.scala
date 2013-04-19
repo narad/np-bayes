@@ -3,8 +3,7 @@ package npbayes.wordseg.lexgens
 import npbayes.distributions.PosteriorPredictive
 import npbayes.WordType
 import npbayes.wordseg.data.SegmentType
-import npbayes.wordseg.HM
-import scala.collection.mutable.HashMap
+import java.util.HashMap
 import org.apache.commons.math3.special.Gamma
 import java.util.{Iterator => JIterator}
 
@@ -20,13 +19,18 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
   val WB: SegmentType = -1000
   val normalizer: Double = nSegments*pseudoCount
   var obsCounts: Int = 0 //total number of observed segments
-  val phonCounts: HM[SegmentType,Int] = new HM //individual counts for observations
+  val phonCounts: HashMap[SegmentType,Integer] = new HashMap //individual counts for observations
   def isVowel = npbayes.wordseg.wordseg.isVowel
 
   
   def _predPhon(seg: SegmentType) = {
-    val nC = phonCounts.getOrElse(seg, 0)
-    (nC+pseudoCount)/(obsCounts+normalizer)
+    val nC = phonCounts.get(seg)
+    if (nC==null) {
+    	(pseudoCount)/(obsCounts+normalizer)      
+    } else {
+      (nC + pseudoCount)/(obsCounts+normalizer)
+    }
+
   }
   
   /**
@@ -55,16 +59,17 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
   }
   
   def _addPhon(s: SegmentType) = {
-    val old = phonCounts.getOrElse(s, 0)
-    phonCounts.put(s,old+1)
+    val old = phonCounts.get(s)
+    if (old==null)
+    	phonCounts.put(s,1)
+    else
+    	phonCounts.put(s,old+1)      
     obsCounts+=1
   }
   
   def _removePhon(s: SegmentType) = {
-    val old = phonCounts.get(s) match {
-      case Some(x) => x
-      case _ => throw new Error("can't remove "+s+" in BigramLearned._removePhone")
-    }
+    val old = phonCounts.get(s)
+    if (old==null) throw new Error("can't remove "+s+" in BigramLearned._removePhone")      
     if (old-1==0)
       phonCounts.remove(s)
     else
@@ -108,8 +113,12 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
    * standard DirichletMultinomialCompound,
    */
   override def logProb = {
-    Gamma.logGamma(normalizer)-Gamma.logGamma(obsCounts+normalizer)+
-    	{ for (count: Int <- phonCounts.values.toList)
-    		yield (Gamma.logGamma(count+pseudoCount)-Gamma.logGamma(pseudoCount)) }.sum 
+    var res = Gamma.logGamma(normalizer)-Gamma.logGamma(obsCounts+normalizer)
+    val cIt = phonCounts.values.iterator
+    while (cIt.hasNext) {
+      val count = cIt.next()
+      res+=Gamma.logGamma(count+pseudoCount)-Gamma.logGamma(pseudoCount)
+    }
+    res
   }
 }

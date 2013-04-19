@@ -222,7 +222,7 @@ object wordseg {
 	      sampleFile.println()
 	    }
 	  }
-	  model.writeAnalysisB(new java.io.PrintStream(new java.io.File(options.OUTPUT+".out")))
+	  model.writeAnalysis(new java.io.PrintStream(new java.io.File(options.OUTPUT+".out")))
 	  traceFile.close()
 	  sampleFile.close()
 	}

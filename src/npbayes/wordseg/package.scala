@@ -135,7 +135,6 @@ class WordType(private val array:Array[Int],private val start:Int, private val e
 
 package object wordseg {
 //    type HM[A,B] = OpenHashMap[A,B] //considerably slower for Bigram model on Brent...
-    type HM[A,B] = HashMap[A,B] //which HashMap to use  
 	val DEBUG = false /** makes everything slow because of checks!! */
 	/*
 	 * Sharon Goldwater's annealing scheme
