@@ -18,6 +18,9 @@ abstract class WordsegModel {
 	
 	def resampleConcentration(hsiters: Int=1): Unit
 	
+	def optimizeConcentration: Unit
+
+	
 	def hyperParam: String 
 	
 	def writeAnalysis(s: PrintStream) =

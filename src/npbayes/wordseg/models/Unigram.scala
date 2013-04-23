@@ -19,6 +19,8 @@ import npbayes.wordseg.UNILEARNEDVOWELS
 import org.apache.commons.math3.special.Gamma
 import optimizer.samplers1D
 import npbayes.WordType
+import org.apache.commons.math3.analysis.UnivariateFunction
+import org.apache.commons.math3.optimization.univariate.BrentOptimizer
 
 
 
@@ -160,14 +162,15 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    }
       val alpha0 = wordseg.wordseg.hsample match {
         case "slice" | "sliceadd" | "slicecheck" =>
+            def samplefunc(x0p: Double,oldlp: Double) = wordseg.wordseg.hsample match {
+	          case "slice" => samplers1D.slicesampleDouble(x0p, logpdf,oldlp)
+	          case "sliceadd" => samplers1D.slicesampleAdd(x0p, logpdf,oldlp)
+	          case "slicecheck" => samplers1D.slicesampleCheck(x0p, logpdf,oldlp)
+	        } 
         	var tmpx0 = pypUni.concentration
         	var oldlogpdf:Double = 1.0
 	         for (i <- 0 until hsiters) {
-	           val tmp = wordseg.wordseg.hsample match {
-	           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
-	           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
-	           	case "slicecheck" => samplers1D.slicesampleCheck(tmpx0, logpdf,oldlogpdf)//,tmpx0/32.0)
-	           }
+	           val tmp = samplefunc(tmpx0,oldlogpdf)
 	           tmpx0 = tmp._1
 	           oldlogpdf = tmp._2
 	         }
@@ -178,7 +181,21 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  pypUni.concentration = alpha0 
 	}	  
 	
-	def sanity =
+   def optimizeConcentration = {
+	  val tmpOptim = new BrentOptimizer(0.00001,0.000001)
+
+      val logpdf = new UnivariateFunction {
+        def value(alpha: Double) = {
+	      var result = 0
+	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      pypUni.logProbSeating(alpha)+logPrior
+	    }
+      }
+      pypUni.concentration = tmpOptim.optimize(20, logpdf, org.apache.commons.math3.optimization.GoalType.MAXIMIZE, 0.0, 32768.0).getPoint() 
+	}	  
+
+   
+   def sanity =
 	  pypUni.sanityCheck
 	
 	/**
@@ -448,7 +465,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  if (npbayes.wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
 	  pypUni.logProb + data.delModelProb + {
-	    if (wordseg.wordseg.hyperparam)
+	    if (wordseg.wordseg.hyperparam!="no")
 	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	    else
 	      0

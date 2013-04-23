@@ -82,8 +82,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def NODROPPRIOR = getDouble("-noDropPrior",1.0); params += (("noDropPrior",NODROPPRIOR))
 	def CONTEXTMODEL = getString("--context","no"); params += (("context",CONTEXTMODEL))
 	def DELAYRECOVERY = getBoolean("--delayRecovery",true); params += (("delayRecovery",DELAYRECOVERY))  //if set to true, no recovery during annealing
-	def HYPERPARAM = getBoolean("--hyper",false); params += (("hyper",HYPERPARAM))
-	def COUPLED = getBoolean("--coupled",false); params += (("coupled",COUPLED))
+	def HYPERPARAM = getString("--hyper","no"); params += (("hyper",HYPERPARAM))
 	def SHAPE = getDouble("--shape",0.1); params += (("shape",SHAPE))
 	def RATE = getDouble("--rate",0.1); params += (("rate",RATE))
 	def HSAMPLE = getString("--hsampler","slice"); params += (("hsampler",HSAMPLE))
@@ -102,8 +101,7 @@ object wordseg {
     var isAnnealing: Boolean = false //so we can check whether we are still annealing or not
     var shape: Double = 0.1
     var rate: Double = 0.1
-    var hyperparam: Boolean = false
-    var coupled: Boolean = false
+    var hyperparam: String = "no"
     var hsample: String = null
     var hsampleiters: Int = 0
     var hsmhvar: Double = 0.1
@@ -146,7 +144,6 @@ object wordseg {
 	  shape = options.SHAPE
 	  rate = options.RATE
 	  hyperparam = options.HYPERPARAM
-	  coupled = options.COUPLED	  
 //	  data = new VarData(options.INPUT,options.DROPPROB,options.DROPIND,options.DROPSEG,contextModel)
 	  
 	  val lexgen: LexGenerator = options.LEXGEN match {
@@ -211,8 +208,12 @@ object wordseg {
 	    val temperature: Double = annealTemperature(i)
 	    isAnnealing = temperature!=1.0
 	    sample(1/temperature)
-	    if (hyperparam)
-	     	model.resampleConcentration({if (i<options.HSLOWITERS) 1 else options.HSAMPLEITERS})
+	    hyperparam match {
+	      case "no" =>
+	      case "sample" => model.resampleConcentration({if (i<options.HSLOWITERS) 1 else options.HSAMPLEITERS})
+	      case "optimize" => model.optimizeConcentration
+	    }
+	    
 	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model.evaluate +
 	    	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
