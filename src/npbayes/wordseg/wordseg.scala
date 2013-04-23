@@ -20,6 +20,7 @@ import npbayes.wordseg.lexgens.UnigramLearned
 import npbayes.wordseg.lexgens.BigramLearned
 import scala.collection.mutable.LinkedList
 import scala.collection.mutable.ListBuffer
+import java.io.PrintStream
 
 abstract case class LexGenerator
 case object UNIUNLEARNED extends LexGenerator
@@ -92,6 +93,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 }
 
 object wordseg {
+	var hyperSampleFile: PrintStream = null
     var dropInferenceMode: ScalaObject = IGNOREDROP
     var isConsonant: Identifier = null
     var isVowel: Identifier = null
@@ -189,6 +191,7 @@ object wordseg {
 	  }
 	  val traceFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".trace"),"utf-8")
 	  val sampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".samples"),"utf-8")
+	  hyperSampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".hypersamples"),"utf-8")
 	  println(options)
 	  traceFile.println(options)
 	  model.init(options.GOLDINIT,options.BOUNDINITPROB)

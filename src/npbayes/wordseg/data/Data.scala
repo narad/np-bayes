@@ -44,13 +44,13 @@ case object Rel2 extends Rule
 case object NoRule extends Rule
 
 abstract class RuleContext
-case class SimpleRContext(rC: CoarseType) extends RuleContext
-case class SimpleLRContext(lC: CoarseType,rC: CoarseType) extends RuleContext
+case class SimpleRContext(rC: PhonemeType) extends RuleContext
+case class SimpleLRContext(lC: PhonemeType,rC: PhonemeType) extends RuleContext
 
-abstract class CoarseType
-case object Consonant extends CoarseType
-case object Vowel extends CoarseType
-case object Pause extends CoarseType
+abstract class PhonemeType
+case object Consonant extends PhonemeType
+case object Vowel extends PhonemeType
+case object Pause extends PhonemeType
 
 class Identifier(f: String) {
   var itemsT: Set[SegmentType] = Set[SegmentType]()
@@ -141,7 +141,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		(seqPhones.toArray,seqBoundaries.toArray,seqRules.toArray)
 	}
 
-	def segmentToType(segment: SegmentType): CoarseType =
+	def segmentToType(segment: SegmentType): PhonemeType =
 	  if (isConsonant(segment))
 	    Consonant
 	  else if (isVowel(segment))

@@ -6,7 +6,6 @@ import npbayes.distributions._
 import npbayes.wordseg.data._
 import npbayes.wordseg.lexgens._
 import scala.util.Random.shuffle
-//import scala.collection.mutable.HashMap
 import java.util.HashMap
 import java.io.PrintStream
 import npbayes.wordseg.IGNOREDROP
@@ -19,6 +18,8 @@ import npbayes.wordseg.BILEARNEDVOWELS
 import npbayes.wordseg.BILEARNED
 import optimizer.samplers1D
 import scala.collection.mutable.OpenHashMap
+import org.apache.commons.math3.analysis.UnivariateFunction
+import org.apache.commons.math3.optimization.univariate.BrentOptimizer
 abstract class BContext
 
 case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: WordType, val w1D: WordType,
@@ -339,7 +340,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  updateBoundary(pos, (newBound,newRule),context)
 	}
 	
-	def resampleConcentration(hsiters: Int = 1) = {
+	def resampleConcentration2(hsiters: Int = 1) = {
 	  def proposallogpdf(x: Double,y: Double): Double = {
         math.log(gaussian(y,math.abs(y)*wordseg.wordseg.hsmhvar,x))
       }
@@ -360,33 +361,39 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
       	
-      pypUni.concentration = wordseg.wordseg.hsample match {
+      def resampleUni = 
+        pypUni.concentration = wordseg.wordseg.hsample match {
         case "slice" | "sliceadd" | "slicecheck" => {
          var tmpx0 = pypUni.concentration
          var oldllh = 1.0
-         for (i <- 0 until hsiters) {
-           val tmp = wordseg.wordseg.hsample match {
-           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
-           	case "sliceadd" => samplers1D.slicesampleAdd(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
-           	case "slicecheck" => samplers1D.slicesampleCheck(tmpx0, logpdfUni, oldllh)//,tmpx0/32.0)
+         def samplefunc(x0p: Double, oldlp: Double) = wordseg.wordseg.hsample match {
+           	case "slice" => samplers1D.slicesampleDouble(x0p, logpdfUni, oldlp)//,tmpx0/32.0)
+           	case "sliceadd" => samplers1D.slicesampleAdd(x0p, logpdfUni, oldlp)//,tmpx0/32.0)
+           	case "slicecheck" => samplers1D.slicesampleCheck(x0p, logpdfUni, oldlp)//,tmpx0/32.0)
            	case _ => throw new Error("Invalid slice-sampler")
-           }
+         }
+         for (i <- 0 until hsiters) {
+           val tmp= samplefunc(tmpx0,oldllh)
            tmpx0 = tmp._1
            oldllh = tmp._2
-//           System.err.println(tmpx0)
+/*           if (i>=5) {
+             wordseg.wordseg.hyperSampleFile.print(tmpx0+" "+oldllh+"\n")
+           }*/
          }
+         for (i <- -100 to 200 by 20) {
+        	 if (i==0)
+        	   wordseg.wordseg.hyperSampleFile.print(tmpx0+i+" "+logpdfUni(tmpx0+i)+" <--\n")
+        	 else 
+        	   wordseg.wordseg.hyperSampleFile.print(tmpx0+i+" "+logpdfUni(tmpx0+i)+"\n")           
+         }
+         wordseg.wordseg.hyperSampleFile.print("\n")
          tmpx0
         }
         case "mh" =>
          samplers1D.mhsample(pypUni.concentration, logpdfUni, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)  
       }
             
-
-      
-      /**
-	   * either a simple alpha for all bigrams, or one for each bigram
-	   */
-      if (wordseg.wordseg.coupled) {
+	  def resampleBiCoupled = {
 	      def logpdfBi(alpha: Double): Double = {
 	    	  if (alpha<0)
 	            return Double.NegativeInfinity
@@ -412,7 +419,6 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	        case "slice" | "sliceadd" | "slicecheck" =>
 			 var tmpx0 = oldSharedBigramAlpha
 			 var oldllh = 1.0
-//			 System.err.println("a1")
 	         for (i <- 0 until hsiters) {
 	           val tmp = wordseg.wordseg.hsample match {
 	           	case "slice" => samplers1D.slicesampleDouble(tmpx0, logpdfBi, oldllh)//,tmpx0/32.0)
@@ -431,7 +437,9 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	        biIt.next().setConcentration(newSharedBigramAlpha)
 	      }
 	      concentrationBi = newSharedBigramAlpha
-      } else {
+      }
+	
+	  def resampleBiIndividual = {
         val bCRPIt = pypBis.values.iterator
         while(bCRPIt.hasNext) {
           val bCRP = bCRPIt.next()
@@ -460,20 +468,83 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
         	    samplers1D.mhsample(x, logpdf, proposallogpdf, proposalsample, wordseg.wordseg.hsampleiters, wordseg.DEBUG)        	    
         	}
         }
-      }
+	}
+      resampleUni
+      if (wordseg.wordseg.coupled)
+        resampleBiCoupled
+      else
+        resampleBiIndividual
 	}	  
 	
+
+	def resampleConcentration(hsiters: Int = 1) = {
+      val tmpOptim = new BrentOptimizer(0.00001,0.000001)
+      val logpdfUni = new UnivariateFunction {
+        def value(alpha: Double): Double = {
+    	  if (alpha<0)
+    		return Double.NegativeInfinity
+	      var result = 0
+	      val logPrior = 
+	        	if (wordseg.wordseg.shape != -1)
+		          Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
+		        else
+		          0
+	      pypUni.logProbSeating(alpha)+logPrior
+	    }
+      }
+      	
+      def optimUni = {
+        pypUni.concentration = tmpOptim.optimize(20, logpdfUni,org.apache.commons.math3.optimization.GoalType.MAXIMIZE,0.0,32768.0).getPoint()
+	    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration-1+" "+logpdfUni.value(pypUni.concentration-1)+"\n")
+	    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration+" "+logpdfUni.value(pypUni.concentration)+" <-\n")	      
+	    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration+1+" "+logpdfUni.value(pypUni.concentration+1)+"\n")	              
+      }
+            
+	  def optimBiCoupled = {
+	      val logpdfBi = new UnivariateFunction {
+	        def value(alpha: Double): Double = {
+	    	  if (alpha<0)
+	            return Double.NegativeInfinity
+		      var result = 0
+		      val logPrior = 
+		        if (wordseg.wordseg.shape != -1)
+		          Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
+		        else
+		          0
+		      var res: Double = 0
+		      val bCRPit = pypBis.values.iterator
+		      while (bCRPit.hasNext) {
+		        res += bCRPit.next().logProbSeating(alpha)
+		      }
+		      assert(res!=Double.NegativeInfinity)
+		      res + logPrior
+		  }
+	      }
+	       
 	
+	      val oldSharedBigramAlpha = concentrationBi 
+	      val newSharedBigramAlpha = tmpOptim.optimize(50, logpdfBi, org.apache.commons.math3.optimization.GoalType.MAXIMIZE, 0.0, 32768.0).getPoint()
+	      val biIt = pypBis.values.iterator	      
+	      while (biIt.hasNext) {
+	        biIt.next().setConcentration(newSharedBigramAlpha)
+	      }
+	      concentrationBi = newSharedBigramAlpha
+	      wordseg.wordseg.hyperSampleFile.print(concentrationBi-1+" "+logpdfBi.value(concentrationBi-1)+"\n")
+	      wordseg.wordseg.hyperSampleFile.print(concentrationBi+" "+logpdfBi.value(concentrationBi)+" <-\n")	      
+	      wordseg.wordseg.hyperSampleFile.print(concentrationBi+1+" "+logpdfBi.value(concentrationBi+1)+"\n\n")	      
+      }
+      optimUni
+      optimBiCoupled  
+	}	  
+
 	
+
 	def hyperParam: String = {
 	  var res = "alpha0 "+pypUni.concentration
       res += " alpha1 "+concentrationBi
 	  res
 	}
 	  
-	/**
-	 * for use with the slice sampler
-	 */
 	def logProb(alpha0: Double, alpha1: Double): Double = {
 	  val lp1 = pypUni.base.logProb
 	  val lp2 = pypUni.logProbSeating(alpha0)
