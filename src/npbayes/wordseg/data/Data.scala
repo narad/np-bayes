@@ -94,6 +94,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	
 	var boundaries = randomBoundaries(wordseg.wordseg.binitProb).toArray
 	var rules = Array.fill[Rule](boundaries.length)(NoRule)
+
 	def init() = {
 		var seqPhones = Vector.empty[Int]
 		var seqBoundaries: Vector[Boundary] = Vector.empty:+UBoundary
@@ -140,8 +141,6 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		(seqPhones.toArray,seqBoundaries.toArray,seqRules.toArray)
 	}
 
-	
-	
 	def segmentToType(segment: SegmentType): CoarseType =
 	  if (isConsonant(segment))
 	    Consonant
@@ -151,26 +150,8 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	    Pause
 	  else
 	    throw new Error("Error in segmentToType...")
-	
-	def addDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nD1+=1
-	  wordseg.wordseg.dropInferenceMode match {
-	    case INFERDROP(_,_) =>
-	    	delModeLType match {
-		    case CVPFollows =>
-		      deleted1.put(SimpleRContext(segmentToType(rSegment)),
-				  		deleted1.getOrElse(SimpleRContext(segmentToType(rSegment)),0)+1)
-		    case CVPLeftRight =>
-		      deleted1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
-				  		deleted1.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
-		    case _ =>			  		
-	    	}
-	    case _ =>
-	  }
-	}
 
-	def addNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nNotD1 += 1
+	def addContext(hm: HashMap[RuleContext,SegmentType],lSegment: SegmentType,rSegment: SegmentType) = {
 	  wordseg.wordseg.dropInferenceMode match {
 	    case INFERDROP(_,_) =>
 	    	delModeLType match {
@@ -185,43 +166,30 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	    	}
 	    case _ =>
 	  }
-	}
-
-	def removeDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nD1 -= 1
-	  wordseg.wordseg.dropInferenceMode match {
-	    case INFERDROP(_,_) =>
-		  delModeLType match {
-		    case CVPFollows =>
-		      val old = deleted1.get(SimpleRContext(segmentToType(rSegment)))
-			  old match {
-			    case Some(x) =>
-			      if (x-1==0)
-			        deleted1.remove(SimpleRContext(segmentToType(rSegment)))
-			      else
-			        deleted1.put(SimpleRContext(segmentToType(rSegment)),x-1)
-			    case None =>
-			      throw new Error("In removeDrop("+rSegment+")")
-			  }
-		    case CVPLeftRight =>
-		      val old = deleted1.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
-			  old match {
-			    case Some(x) =>
-			      if (x-1==0)
-			        deleted1.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
-			      else
-			        deleted1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
-			    case None =>
-			      throw new Error("In removeDrop("+lSegment+","+rSegment+")")
-			  	      
-		      }
-		    case _ =>	      
-		  }
-	    case _ =>
-	  }     
+	  
 	}
 	
-	def removeNoDrop(hm: HashMap[RuleContext,Int], lSegment: SegmentType, rSegment: SegmentType) = {
+	def addDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nD1+=1
+	  addContext(deleted1,lSegment,rSegment)
+	}
+
+	def addDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nD2+=1
+	  addContext(deleted1,lSegment,rSegment)
+	}
+	
+	def addNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nNotD1 += 1
+	  addContext(realized1,lSegment,rSegment)
+	}
+
+	def addNoDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nNotD2 += 1
+	  addContext(realized2,lSegment,rSegment)
+	}	
+
+	def removeContext(hm: HashMap[RuleContext,Int],lSegment: SegmentType, rSegment: SegmentType) = {
 	  wordseg.wordseg.dropInferenceMode match {
 	    case INFERDROP(_,_) =>
 		  delModeLType match {
@@ -232,60 +200,63 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 			      if (x-1==0)
 			        hm.remove(SimpleRContext(segmentToType(rSegment)))
 			      else
-			    	hm.put(SimpleRContext(segmentToType(rSegment)),x-1)
+			        hm.put(SimpleRContext(segmentToType(rSegment)),x-1)
 			    case None =>
 			      throw new Error("In removeDrop("+rSegment+")")
 			  }
 		    case CVPLeftRight =>
-		      val old = hm.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+		      val old = deleted1.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
 			  old match {
 			    case Some(x) =>
 			      if (x-1==0)
 			        hm.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
 			      else
-			    	hm.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
+			        hm.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
 			    case None =>
 			      throw new Error("In removeDrop("+lSegment+","+rSegment+")")
-			  }
+			  	      
+		      }
 		    case _ =>	      
 		  }
 	    case _ =>
-	  }	  
+	  }     
+	}	
+	
+	def removeDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nD1 -= 1
+	  removeContext(deleted1,lSegment,rSegment)
+	}
+	
+	def removeDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nD2 -= 1
+	  removeContext(deleted2,lSegment,rSegment)
 	}
 	
 	def removeNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
 	  nNotD1 -= 1
-	  wordseg.wordseg.dropInferenceMode match {
-	    case INFERDROP(_,_) =>
-		  delModeLType match {
-		    case CVPFollows =>
-		      val old = realized1.get(SimpleRContext(segmentToType(rSegment)))
-			  old match {
-			    case Some(x) =>
-			      if (x-1==0)
-			        realized1.remove(SimpleRContext(segmentToType(rSegment)))
-			      else
-			    	realized1.put(SimpleRContext(segmentToType(rSegment)),x-1)
-			    case None =>
-			      throw new Error("In removeDrop("+rSegment+")")
-			  }
-		    case CVPLeftRight =>
-		      val old = realized1.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
-			  old match {
-			    case Some(x) =>
-			      if (x-1==0)
-			        realized1.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
-			      else
-			    	realized1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
-			    case None =>
-			      throw new Error("In removeDrop("+lSegment+","+rSegment+")")
-			  }
-		    case _ =>	      
-		  }
-	    case _ =>
-	  }
+	  removeContext(realized1,lSegment,rSegment)
+	}
+	
+	def removeNoDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
+	  nNotD2 -= 1
+	  removeContext(realized2,lSegment,rSegment)
 	}	
 
+	def whichTransform(observed: WordType, underlying: WordType): Rule = {
+	  val uEndsIn = underlying.lastSeg
+	  val sameLength = observed.size==underlying.size
+	  if (underlying.size>1) {
+	    uEndsIn match {
+	      case DROPSEG1 => if (sameLength) Rel1 else Del1
+	      case DROPSEG2 => if (sameLength) Rel2 else Del2 
+	      case _ => NoRule
+	    }
+	  } else {
+	    NoRule
+	  }
+	}
+	
+	
 	/**
 	 * takes care of the counts for rule applications
 	 * we can recover trivially
@@ -294,33 +265,32 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	 * if underlying ends in d and differs --> dropped d
 	 * if underlying endsin d and doesn't differ --> realization of d
 	 */
-	def removeTransformation(observed: WordType, underlying: WordType,rightContext: WordType) = {
-	  val uEndsIn = underlying.lastSeg
-	  val sameLength = observed.size == underlying.size
-	  if (underlying.size>1)
-		  uEndsIn match {
-		    case DROPSEG1 =>
-		      if (sameLength)
-		        removeNoDrop1(underlying(underlying.length-2), rightContext(0))
-		      else
-		        removeDrop1(underlying(underlying.length-2),rightContext(0))
-		    case DROPSEG2 =>
-		    case _ =>
-		  }
+	def removeTransformation(rule: Rule, underlying: WordType,rightContext: WordType) = {
+	  rule match {
+	    case Rel1 =>
+          removeNoDrop1(underlying(underlying.length-2), rightContext(0))
+	    case Del1 =>
+	      removeDrop1(underlying(underlying.length-2),rightContext(0))
+	    case Rel2 =>
+	      removeNoDrop2(underlying(underlying.length-2), rightContext(0))
+	    case Del2 =>
+	      removeDrop2(underlying(underlying.length-2), rightContext(0))	      
+	    case NoRule =>
+	  }
 	}
-	def addTransformation(observed: WordType, underlying: WordType,rightContext: WordType) = {
-	  val uEndsIn = underlying.lastSeg
-	  val sameLength = observed.size == underlying.size
-	  if (underlying.size>1)
-		  uEndsIn match {
-		    case DROPSEG1 =>
-		      if (sameLength)
-		        addNoDrop1(underlying(underlying.length-2), rightContext(0))
-		      else
-		        addDrop1(underlying(underlying.length-2),rightContext(0))
-		    case DROPSEG2 =>
-		    case _ =>
-		  }
+
+	def addTransformation(rule: Rule, underlying: WordType,rightContext: WordType) = {
+	  rule match {
+	    case Rel1 =>
+	        addNoDrop1(underlying(underlying.length-2), rightContext(0))
+	    case Del1 =>
+	        addDrop1(underlying(underlying.length-2),rightContext(0))
+	    case Rel2 =>
+	        addNoDrop2(underlying(underlying.length-2), rightContext(0))
+	    case Del2 =>
+	        addDrop2(underlying(underlying.length-2),rightContext(0))
+	    case NoRule =>
+	  }
 	}
 	
 	

@@ -73,6 +73,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  data.evaluate.toString
 	
 	def boundaries = data.boundaries
+	def rules = data.rules
 	def nTokens = pypUni._oCount
 
 	def update(w: WordType) = pypUni.update(w)
@@ -118,13 +119,13 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      	case WBoundary => {
 	      	  val context = medialContext(cPos)
 	          update(context.w1U)
-	      	  data.addTransformation(context.w1O, context.w1U, context.rU)
+	      	  data.addTransformation(data.whichTransform(context.w1O, context.w1U),context.w1U, context.rU)
  	      	  inner(cPos+1,cPos+1)
 	      	}
 	      	case UBoundary => {
 	      	  val context = finalContext(cPos)
 	      	  update(context.wU)
- 	      	  data.addTransformation(context.wO, context.wU, data.UBOUNDARYWORD)
+ 	      	  data.addTransformation(data.whichTransform(context.wO, context.wU),context.wU, data.UBOUNDARYWORD)
 	      	  nUtterances+=1	      	  
  	      	  inner(cPos+1,cPos+1) 	      	  
 	      	}
@@ -304,10 +305,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    	    r match {
 	    	      case Del1 =>
 	    	        update(w1D)
-	    	        data.addTransformation(w1O, w1D, w2U)
+	    	        data.addTransformation(data.whichTransform(w1O, w1D),w1D, w2U)
 	    	      case Rel1 | NoRule =>
 	    	        update(w1O)
-	    	        data.addTransformation(w1O,w1O,w2U)
+	    	        data.addTransformation(data.whichTransform(w1O,w1O),w1O,w2U)
 	    	    }
 	    	    update(w2U)
 	    	}
@@ -316,10 +317,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      r match {
 	        case Del1 =>
 	          update(w1D)
-	          data.addTransformation(w1O, w1D, data.UBOUNDARYWORD)	          
+	          data.addTransformation(data.whichTransform(w1O, w1D),w1D, data.UBOUNDARYWORD)	          
 	        case Rel1 | NoRule =>
 	          update(w1O)
-     		  data.addTransformation(w1O, w1O, data.UBOUNDARYWORD)
+     		  data.addTransformation(data.whichTransform(w1O, w1O),w1O, data.UBOUNDARYWORD)
 	      }
 	  }
 	  if (wordseg.DEBUG) {
@@ -327,19 +328,19 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  }
 	}
 	
-	def removeAssociatedObservations(context: UContext, boundary: Boundary) = {//hasBoundary: Boolean) =
+	def removeAssociatedObservations(context: UContext, boundary: Boundary, rule: Rule) = {//hasBoundary: Boolean) =
 	  context match {
 	  case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO) =>
 	    val isFinal=rU==data.UBOUNDARYWORD
 	    if (isFinal) nUtterances-=1
 	    if (boundary==WBoundary) {
-	      data.removeTransformation(w1O, w1U, w2U)        	      
+	      data.removeTransformation(rule, w1U, w2U)        	      
 	      remove(w1U)
 	      remove(w2U)
 	    } else
 	    	remove(w1w2U)
 	  case UnigramFinalContext(w1O,w1U,w1D) =>
-	    data.removeTransformation(w1O, w1U, data.UBOUNDARYWORD)
+	    data.removeTransformation(rule, w1U, data.UBOUNDARYWORD)
 	    remove(w1U)
 	  }
 	  if (wordseg.DEBUG) {
@@ -349,7 +350,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	
 	def resample(pos: Int, anneal: Double=1.0): Unit = {
 	    val context = boundaryContext(pos)
-		removeAssociatedObservations(context,boundaries(pos))//==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
+		removeAssociatedObservations(context,boundaries(pos),rules(pos))//==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
 		val result = _calcHypotheses(context)
 		if (anneal==1.0)
 		  updateBoundary(pos, result.sample,context)
@@ -385,7 +386,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    case NoBoundary => Unit
 	    case _ =>
 		    val context = boundaryContext(pos)
-		    removeAssociatedObservations(context, boundaries(pos))
+		    removeAssociatedObservations(context, boundaries(pos),rules(pos))
 		    context match {
 		    	case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO) =>
 		    		val res = __reseatProbs(w1D, w1O,rU,rO)
