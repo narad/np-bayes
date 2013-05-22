@@ -59,9 +59,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def ALPHA1 = getDouble("--alpha1", 3000); params += (("alpha1",ALPHA1))
 	def PSTOP = getDouble("--pstop", 0.5); params += (("pstop",PSTOP))	//monkey-model stop-probability
 	def LEXGEN = getString("--lexgen","monkey"); params += (("lexgen",LEXGEN)) //monkey, learned, vowel
-	def VOWELLIST = getString("--vowels","/home/bborschi/git/TDropping/vowels.txt"); params += (("vowels",VOWELLIST))
-	def CONSLIST = getString("--consonants","/home/bborschi/git/TDropping/consonants.txt"); params += (("consonants",CONSLIST))
-	def SILLIST = getString("--pauses","/home/bborschi/git/TDropping/silences.txt"); params += (("pauses",SILLIST))
+	def PHONMAP = getString("--phonmap",""); params += (("vowels",PHONMAP))
 	def ITERS = getInt("--iters",1000); params += (("iters",ITERS))
 	def ANNEALITERS = getInt("--annealIters",1000); params += (("annealIters",ANNEALITERS))
 	def STARTTEMP = getDouble("--startTemp",1); params += (("startTemp",STARTTEMP))
@@ -95,7 +93,7 @@ object wordseg {
 	var hyperSampleFile: PrintStream = null
     var dropInferenceMode: ScalaObject = IGNOREDROP
     var isConsonant: Identifier = null
-    var isVowel: Identifier = null
+    def isVowel(x: SegmentType) = SymbolClassTable(PhonemeClassMap.getClass(x))=="VOWL"
     var isPause: Identifier = null
 //    var data: VarData = null
     var isAnnealing: Boolean = false //so we can check whether we are still annealing or not
@@ -121,9 +119,9 @@ object wordseg {
 	hsampleiters = options.HSAMPLEITERS
 	hsample = options.HSAMPLE
 	hsmhvar = options.HSMHSSD
-	isConsonant = new Identifier(options.CONSLIST)
- 	isVowel = new Identifier(options.VOWELLIST)
-	isPause = new Identifier(options.SILLIST)
+	if (options.PHONMAP!="") {
+	  PhonemeClassMap.init(options.PHONMAP)
+	}
 	binitProb = options.BOUNDINITPROB
 	  val contextModel = options.CONTEXTMODEL match {
 	    case "no" =>
@@ -214,7 +212,7 @@ object wordseg {
 	      case "optimize" => model.optimizeConcentration
 	    }
 	    
-	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model.evaluate +
+	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model._logProbTrack+" "+model.evaluate + 
 	    	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
 	    	else

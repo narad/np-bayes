@@ -6,7 +6,9 @@ import npbayes.wordseg.data.SegmentType
 import java.util.HashMap
 import org.apache.commons.math3.special.Gamma
 import java.util.{Iterator => JIterator}
-import npbayes.wordseg.data.SymbolTable
+import npbayes.wordseg.data.SymbolSegTable
+import npbayes.wordseg.data.SymbolClassTable
+import npbayes.wordseg.data.PhonemeClassMap
 
 
 /**
@@ -19,16 +21,19 @@ import npbayes.wordseg.data.SymbolTable
  */
 
 class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, val pseudoCount: Double = 0.01, val vowelConstraint: Boolean = false) extends PosteriorPredictive[WordType] {
-  def isVowel = npbayes.wordseg.wordseg.isVowel
-  val WB: SegmentType = SymbolTable.nSymbols+1
+  def isVowel(x: SegmentType) =SymbolClassTable(PhonemeClassMap.getClass(x))=="VOWEL"
   val normalizer: Double = nSegments*pseudoCount
   var obsCounts: Int = 0 //total number of observed segments
+  var wordCount: Int = 0
+  var branchCount: Int = 0
   var utCount: Int = 0 //number of generated utterance-boundary symbols  
-//  val phonCounts: HashMap[SegmentType,Integer] = new HashMap //individual counts for observations
-  val phonCounts: Array[SegmentType] = Array.fill(SymbolTable.nSymbols+2)(0)
+  val phonCounts: Array[SegmentType] = Array.fill(SymbolSegTable.nSymbols)(0)
+  
+  def _predWB =
+    (wordCount + 1) / (wordCount+branchCount+2.0)
   
   def _predPhon(seg: SegmentType) = {
-    val nC: Int = phonCounts(seg) 
+    val nC: Int = phonCounts(seg-1) 
     (nC+pseudoCount)/(obsCounts+normalizer)
   }
   
@@ -41,34 +46,30 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
     else {
         var hasVowel: Boolean = false
 	    var p = 1.0
+	    val continue = (1-_predWB)
 	    for (seg <- obs) {
 	      if (isVowel(seg))
 	        hasVowel = true
 	      p = p*_predPhon(seg)
-	      // _addPhon(seg) //uncomment for 'exactness'
+	      if (hasVowel)
+	        p = p*continue
 	    }
-	    val res = (1-pUB)*p*_predPhon(WB)
-	    /** uncomment for 'exactness'
-		val segs2 = obs.iterator()
-	    while (segs2.hasNext()) {
-	      _removePhon(seg2.next()) 
-	    }
-	     */
-	   if (hasVowel || !vowelConstraint)
+	    val res = (1-pUB)*p*((1-continue)/continue)
+	    if (hasVowel || !vowelConstraint)
 	     res
-	   else
+	    else
 	     0
     }
   }
   
   def _addPhon(s: SegmentType) = {
-	phonCounts(s)+=1
+	phonCounts(s-1)+=1
     obsCounts+=1
   }
   
   def _removePhon(s: SegmentType) = {
-	phonCounts(s)-=1
-	if (phonCounts(s)<0)
+	phonCounts(s-1)-=1
+	if (phonCounts(s-1)<0)
       throw new Error("can't remove "+s+" in BigramLearned._removePhone")
     obsCounts-=1
   }
@@ -84,14 +85,23 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
     else {
 	    var p=1.0
 	    var hasVowel = false
-	    for (seg<-obs) {
-	      if (isVowel(seg))
+	    var i = 0
+	    while (i<obs.size-1) {
+	      if (isVowel(obs(i)))
 	        hasVowel = true
-	      p = p*_predPhon(seg)
-	      _addPhon(seg)
+	      p = p*_predPhon(obs(i))
+	      if (hasVowel) {
+	        p = p * (1-_predWB)
+	        branchCount+=1
+	      }
+	      _addPhon(obs(i))
+	      i+=1
 	    }
-	    val res = (1-pUB)*p*_predPhon(WB)
-	    _addPhon(WB)
+	    if (isVowel(obs(i)))
+	      hasVowel=true
+	    val res = (1-pUB)*p*_predPhon(obs(i))*_predWB
+	    _addPhon(obs(i))
+	    wordCount+=1
 	    if (hasVowel || !vowelConstraint)
 	    	res
 	    else
@@ -105,12 +115,29 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
       pUB
     }
     else { 
+        // find the j such that there are no until position j
+        var j = 0
+        var foundV = false
+        while (j<obs.size && !foundV) {
+          if (isVowel(obs(j)))
+            foundV=true
+          else
+            j+=1
+        }
 	    var p=1.0
-	    _removePhon(WB)
-	    p=p*_predPhon(WB)
-	    for (seg <- obs.reverse) {
-	      _removePhon(seg)
-	      p*=_predPhon(seg)
+	    var i=obs.size-1
+	    wordCount-=1
+	    _removePhon(obs(i))
+	    p=p*_predWB*_predPhon(obs(i))
+	    i-=1
+	    while (i>=0) {
+	      _removePhon(obs(i))
+	      p*=_predPhon(obs(i))
+	      if (i>=j) {
+	        branchCount-=1
+	        p*=(1-_predWB)
+	      }
+	      i-=1
 	    }
 	    (1-pUB)*p
     }
@@ -128,6 +155,7 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
       result +=Gamma.logGamma(phonCounts(i)+pseudoCount)-Gamma.logGamma(pseudoCount)
       i+=1
     }
-    result + math.log(pUB)*utCount + math.log(1-pUB)*phonCounts(WB)
+    result + math.log(pUB)*utCount + math.log(1-pUB)*wordCount + Gamma.logGamma(2.0)-Gamma.logGamma(wordCount+branchCount+2.0)+
+    Gamma.logGamma(branchCount+1.0)-2*Gamma.logGamma(1.0)+Gamma.logGamma(wordCount+1.0)
  }
 }

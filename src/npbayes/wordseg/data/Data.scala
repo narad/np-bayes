@@ -48,6 +48,9 @@ case class SimpleRContext(rC: PhonemeType) extends RuleContext
 case class SimpleLRContext(lC: PhonemeType,rC: PhonemeType) extends RuleContext
 
 abstract class PhonemeType
+case class PType(x: Int) extends PhonemeType {
+  override def toString = SymbolClassTable(x)
+}
 case object Consonant extends PhonemeType
 case object Vowel extends PhonemeType
 case object Pause extends PhonemeType
@@ -55,7 +58,7 @@ case object Pause extends PhonemeType
 class Identifier(f: String) {
   var itemsT: Set[SegmentType] = Set[SegmentType]()
   for (l <- scala.io.Source.fromFile(f).getLines)
-    itemsT = itemsT+SymbolTable(l)
+    itemsT = itemsT+SymbolSegTable(l)
   
   def apply(x: SegmentType): Boolean =
     itemsT.contains(x)
@@ -68,10 +71,10 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	val _random = new Random()
 	//Special Characters
 	val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
-	val DROPSEG1=SymbolTable(DROP1)
-	val DROPSEG2=SymbolTable(DROP2)
+	val DROPSEG1=SymbolSegTable(DROP1)
+	val DROPSEG2=SymbolSegTable(DROP2)
 	def isConsonant = wordseg.wordseg.isConsonant
-	def isVowel = wordseg.wordseg.isVowel
+	def isVowel(x: SegmentType) = wordseg.wordseg.isVowel(x)
 	def isPause = wordseg.wordseg.isPause	
 	//Rules
 	var nD1 = 0
@@ -86,11 +89,11 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	val sentences: ArrayBuffer[(Int,Int)] = new ArrayBuffer //(x,y) refers to a sentence spanning the characters from
 	
 	
-		/**
+	/**
 	 * Initialize the data and goldBoundaries
 	 */
 	val (data,goldBoundaries,goldRules) = init
-	val UBOUNDARYWORD=new WordType(data,0,1,-1) //always prefix corpus with an additional boundary symbol
+	val UBOUNDARYWORD=new WordType(Array.fill(1)(SymbolSegTable(UBOUNDARYSYMBOL)),0,1,-1) //always prefix corpus with an additional boundary symbol
 	
 	var boundaries = randomBoundaries(wordseg.wordseg.binitProb).toArray
 	var rules = Array.fill[Rule](boundaries.length)(NoRule)
@@ -104,13 +107,13 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		def processLine(line: String) = {
 			for (w <- line.stripLineEnd.split("\t")) {
 				for (c: String <- w.split(" ")) {
-				seqPhones = seqPhones:+ SymbolTable(c)
+				seqPhones = seqPhones:+ SymbolSegTable(c)
 					seqBoundaries = seqBoundaries:+NoBoundary
 					seqRules = seqRules:+NoRule
 					stringPos+=1
 				}
 				//last symbole is Boundary, check for deleted symbols
-				SymbolTable(seqPhones.last) match {
+				SymbolSegTable(seqPhones.last) match {
 				  case MISSING1 =>
 				    seqPhones = seqPhones.dropRight(1)
 					seqBoundaries = seqBoundaries.dropRight(2):+WBoundary
@@ -141,26 +144,18 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		(seqPhones.toArray,seqBoundaries.toArray,seqRules.toArray)
 	}
 
-	def segmentToType(segment: SegmentType): PhonemeType =
-	  if (isConsonant(segment))
-	    Consonant
-	  else if (isVowel(segment))
-	    Vowel
-	  else if (isPause(segment))
-	    Pause
-	  else
-	    throw new Error("Error in segmentToType...")
-
+	def segmentToType(segment: SegmentType): PhonemeType = PhonemeClassMap(segment)
+	  
 	def addContext(hm: HashMap[RuleContext,SegmentType],lSegment: SegmentType,rSegment: SegmentType) = {
 	  wordseg.wordseg.dropInferenceMode match {
 	    case INFERDROP(_,_) =>
 	    	delModeLType match {
 	    		case CVPFollows =>
-	    			realized1.put(SimpleRContext(segmentToType(rSegment)),
-	    					realized1.getOrElse(SimpleRContext(segmentToType(rSegment)), 0)+1)
+	    			hm.put(SimpleRContext(segmentToType(rSegment)),
+	    					hm.getOrElse(SimpleRContext(segmentToType(rSegment)), 0)+1)
 	    		case CVPLeftRight =>
-	    			realized1.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
-	    					realized1.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
+	    			hm.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
+	    					hm.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
 	    		case _ =>
 	      
 	    	}
@@ -205,7 +200,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 			      throw new Error("In removeDrop("+rSegment+")")
 			  }
 		    case CVPLeftRight =>
-		      val old = deleted1.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
+		      val old = hm.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
 			  old match {
 			    case Some(x) =>
 			      if (x-1==0)
@@ -299,14 +294,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	 */
 	def getSentenceLength(x:(Int, Int)): Int =
 	  x._2-x._1
-	
-	
 
-	
-	
-
-
-	
 	/**
 	 * randomize boundaries
 	 */
@@ -344,7 +332,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	    (nD1+priorDrop) / (priorDrop+priorNodrop+nD1+nNotD1)
 	}
 
-		def dropProbRContext(rContext: SegmentType): Double = wordseg.wordseg.dropInferenceMode match {
+	def dropProbRContext(rContext: SegmentType): Double = wordseg.wordseg.dropInferenceMode match {
 	  case IGNOREDROP =>
 	    throw new Error("Ignoring drop, Shouldn't be in dropProbRContext")
 	  case INFERDROP(priorDrop,priorNodrop) =>
@@ -387,11 +375,10 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		        else
 		          0.07
 		      else
-		        throw new Error("Unknown Segment "+SymbolTable(rContext))	      
+		        throw new Error("Unknown Segment "+SymbolSegTable(rContext))	      
 	  }
 
 	}//dropProb	//TODO - word-specific probabilities  */
-	
 	
 	def setBoundary(pos: Int, b: Boundary): Unit = 
 	  boundaries(pos)= b
@@ -552,20 +539,26 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	      	case NoBoundary => inner(sPos,cPos+1,res)
 	      	case WBoundary =>
 	      	  rules(cPos) match {
-	      	    case NoRule =>
+	      	    case NoRule | Rel1 | Rel2 =>
 	      	      res.append(wToS(new WordType(data,sPos-1,cPos,-1),segSep)+wordSeg)
 	      	      inner(cPos+1,cPos+1,res)
 	      	    case Del1 =>
 	      	      res.append(wToS(new WordType(data,sPos-1,cPos,DROPSEG1),segSep)+wordSeg)
+	      	      inner(cPos+1,cPos+1,res)
+	      	    case Del2 =>
+	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG2),segSep)+"\n")
 	      	      inner(cPos+1,cPos+1,res)	      	      
 	      	  }
 	      	case UBoundary =>
 	      	  rules(cPos) match {
-	      	    case NoRule =>
+	      	    case NoRule | Rel1 | Rel2 =>
 	      	      res.append(wToS(new WordType(data,sPos-1, cPos,-1),segSep)+"\n")
 	      	      inner(cPos+1,cPos+1,res)
 	      	    case Del1 =>
 	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG1),segSep)+"\n")
+	      	      inner(cPos+1,cPos+1,res)	      	      
+	      	    case Del2 =>
+	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG2),segSep)+"\n")
 	      	      inner(cPos+1,cPos+1,res)	      	      
 	      	  }
 	    }
@@ -590,16 +583,20 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	      	case WBoundary => 
 	      	  rules(cPos) match {
 	      	    case Del1 =>
-	      	      out.print("t")
-	      	    case NoRule =>
+	      	      out.print(DROP1)
+	      	    case Del2 =>
+	      	      out.print(DROP2)
+	      	    case NoRule | Rel1 | Rel2 =>
 	      	      out.print("1")
 	      	  }
 	    
 	      	case UBoundary => 
 	      	  rules(cPos) match {
 	      	    case Del1 =>
-	      	      out.print("t")
-	      	    case NoRule =>
+	      	      out.print(DROP1)
+	      	    case Del2 =>
+	      	      out.print(DROP2)
+	      	    case NoRule | Rel1 | Rel2 =>
 	      	      out.print("1")
 	      	  }
 	      }
@@ -675,16 +672,16 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	def showDropProbs: String = delModeLType match {
 	  case GlobalFix =>
 	    dropProb(null, 1).toString
-	  case CVPFollows => 
-	    "C "+dropProbRContext(isConsonant.example)+" V "+dropProbRContext(isVowel.example) +
-	    " P "+dropProbRContext(isPause.example)
-	  case CVPLeftRight => 
-	    " C_C "+dropProbContext(isConsonant.example,isConsonant.example)+
+	  case CVPFollows => ""
+/*	    "C "+dropProbRContext(isConsonant.example)+" V "+dropProbRContext(isVowel.example) +
+	    " P "+dropProbRContext(isPause.example)*/
+	  case CVPLeftRight => ""
+/*	    " C_C "+dropProbContext(isConsonant.example,isConsonant.example)+
 	    " C_V "+dropProbContext(isConsonant.example,isVowel.example) +
 	    " C_P "+dropProbContext(isConsonant.example,isPause.example) +
 	    " V_C "+dropProbContext(isVowel.example,isConsonant.example)+
 	    " V_V "+dropProbContext(isVowel.example,isVowel.example) +
-	    " V_P "+dropProbContext(isVowel.example,isPause.example)	    
+	    " V_P "+dropProbContext(isVowel.example,isPause.example)*/	    
 	}
 	
 }

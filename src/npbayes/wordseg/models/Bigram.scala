@@ -30,7 +30,7 @@ case class BigramMedialContext(val leftU: WordType, val w1O: WordType, val w1U: 
 case class BigramFinalContext(val leftU: WordType, val wO: WordType, val wU: WordType, val wD: WordType) extends BContext					  
 
 object Bigram {
-  val FAITHFUL = true
+  val FAITHFUL = false
 }
 
 class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Double=0,var concentrationBi: Double, var discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
@@ -44,11 +44,11 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	val pypUni = { 
 		val tlexgen = lexgen match {
 		  case BIUNLEARNED =>
-	    	    new MonkeyBigram(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5)
+	    	    new MonkeyBigram(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.5,data.UBOUNDARYWORD,0.5)
 		  case BILEARNEDVOWELS =>
-	    	    new BigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,data.UBOUNDARYWORD,0.5,1.0,true)		    
+	    	    new BigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,data.UBOUNDARYWORD,0.5,1.0,true)		    
 		  case BILEARNED =>
-	          new BigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,data.UBOUNDARYWORD,0.5,1.0,false)
+	          new BigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,data.UBOUNDARYWORD,0.5,1.0,false)
 		  case _ =>
 		    throw new Error("Invalid value for lexgen:"+lexgen)
 	      }
@@ -178,6 +178,10 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  if (goldBoundaries) {
 	    data.boundaries=data.goldBoundaries.clone
 	    data.rules=data.goldRules.clone
+	    for (i <- 1 until data.rules.length) {
+	      if (data.rules(i)==Del1)
+	        data.rules(i)=NoRule
+	    }
 	  }
 	  inner(1,1)
 	}	
@@ -275,7 +279,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	          r match {
 	            case Del1 =>
 		          _logProbTrack += math.log(update(leftU,w1D)*toSurface(w1D,w1O,w2U))
-		          data.addTransformation(r, w1U, w2U)		          
+		          data.addTransformation(r, w1D, w2U)		          
 		          _logProbTrack += math.log(update(w1D,w2U)*toSurface(w2U,w2O,rightU))
 		          _logProbTrack += math.log(update(w2U,rightU)) //*toSurface(rightU,rightO,null))
 	            case NoRule | Rel1 =>
@@ -292,7 +296,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	          r match {
 	            case Del1 =>
 	            	_logProbTrack += math.log(update(leftU,wD)*toSurface(wD,wO,data.UBOUNDARYWORD))
-	            	data.addTransformation(r,wO,data.UBOUNDARYWORD)	            	
+	            	data.addTransformation(r,wD,data.UBOUNDARYWORD)	            	
 	            	_logProbTrack += math.log(update(wD,data.UBOUNDARYWORD))
 	            case Rel1 | NoRule =>
 	            	_logProbTrack += math.log(update(leftU,wO)*toSurface(wO,wO,data.UBOUNDARYWORD))
@@ -585,14 +589,16 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 
 	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  res.add((UBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
+	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP)
+		  res.add((UBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
 	  val tRule = data.whichTransform(w1O,w1O)
 	  res.add((UBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
 	  res
 	}
 	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType, w2U: WordType, w2O: WordType, rightU: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  res.add((WBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
+	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP)
+	    res.add((WBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
       val tRule = data.whichTransform(w1O, w1O)			  				 
 	  res.add((WBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O,w2U)*

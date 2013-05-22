@@ -20,7 +20,7 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
   val normalizer: Double = nSegments*pseudoCount
   var obsCounts: Int = 0 //total number of observed segments
   val phonCounts: HashMap[SegmentType,Integer] = new HashMap //individual counts for observations
-  def isVowel = npbayes.wordseg.wordseg.isVowel
+  def isVowel = npbayes.wordseg.wordseg.isVowel(_)
 
   
   def _predPhon(seg: SegmentType) = {

@@ -52,11 +52,11 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	val pypUni = {
 	  val tlexgen = lexgen match {
 	    case UNIUNLEARNED =>
-	    	new MonkeyUnigram(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.5)
+	    	new MonkeyUnigram(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.5)
 	    case UNILEARNED =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1,false)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.1,false)
 	    case UNILEARNEDVOWELS =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolTable.nSymbols-2,0.1,true)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.1,true)
 	    case _ =>
 	      throw new Error("invalid value for lexgen: "+lexgen)
 	  }
@@ -132,8 +132,14 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
  	      	  inner(cPos+1,cPos+1) 	      	  
 	      	}
 	  }
-	  if (gold)
+	  if (gold) {
 	    data.boundaries=data.goldBoundaries.clone
+	    data.rules=data.goldRules.clone
+	    for (i <- 1 until data.rules.length) {
+	      if (data.rules(i)==Del1)
+	        data.rules(i)=NoRule
+	    }	    
+	  }
 	  val res = inner(1,1)
 	  if (wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
@@ -322,10 +328,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    	    r match {
 	    	      case Del1 =>
 	    	        update(w1D)
-	    	        data.addTransformation(data.whichTransform(w1O, w1D),w1D, w2U)
+	    	        data.addTransformation(r,w1D, w2U)
 	    	      case Rel1 | NoRule =>
 	    	        update(w1O)
-	    	        data.addTransformation(data.whichTransform(w1O,w1O),w1O,w2U)
+	    	        data.addTransformation(r,w1O,w2U)
 	    	    }
 	    	    update(w2U)
 	    	}
@@ -334,10 +340,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	      r match {
 	        case Del1 =>
 	          update(w1D)
-	          data.addTransformation(data.whichTransform(w1O, w1D),w1D, data.UBOUNDARYWORD)	          
+	          data.addTransformation(r,w1D, data.UBOUNDARYWORD)	          
 	        case Rel1 | NoRule =>
 	          update(w1O)
-     		  data.addTransformation(data.whichTransform(w1O, w1O),w1O, data.UBOUNDARYWORD)
+     		  data.addTransformation(r,w1O, data.UBOUNDARYWORD)
 	      }
 	  }
 	  if (wordseg.DEBUG) {
@@ -384,7 +390,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 
   def __reseatProbsFinal(w1D: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  val tRule = if (w1O.finalSeg==data.DROPSEG1) Rel1 else NoRule
+	  val tRule = data.whichTransform(w1O, w1O)
 	  res.add((UBoundary,Del1), pypUni(w1D)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
 	  res.add((UBoundary,tRule), pypUni(w1O)*toSurface(w1O,w1O,data.UBOUNDARYWORD))
 	  res
@@ -392,7 +398,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
   
   def __reseatProbs(w1D: WordType, w1O: WordType,rU: WordType, rO: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  val tRule = if (w1O.finalSeg==data.DROPSEG1) Rel1 else NoRule
+	  val tRule = data.whichTransform(w1O, w1O)
 	  res.add((WBoundary,Del1), pypUni(w1D)*toSurface(w1D, w1O,rU))
 	  res.add((WBoundary,tRule), pypUni(w1O)*toSurface(w1O,w1O,rU))
 	  res

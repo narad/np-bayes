@@ -17,7 +17,7 @@ class Result(val tp: Double,val tr: Double, val bp: Double, val br: Double, val 
 } 
 
 
-object SymbolTable {
+object SymbolSegTable {
   val mappingStringToSeg = HashBiMap.create[String,SegmentType]()
   def mappingSegToString = mappingStringToSeg.inverse
   var nextR: Int = 1
@@ -41,6 +41,31 @@ object SymbolTable {
     mappingSegToString.get(x)
 }
 
+object SymbolClassTable {
+  val mappingStringToSeg = HashBiMap.create[String,SegmentType]()
+  def mappingSegToString = mappingStringToSeg.inverse
+  var nextR: Int = 1
+  def nSymbols = mappingStringToSeg.size
+  def getNextR: Int = {
+    nextR = (nextR+1)
+    (nextR-1).toInt
+  }
+  
+  def apply(x: String): SegmentType = {
+    val res = mappingStringToSeg.get(x)
+    if (res==0) {
+      val newId=getNextR
+      mappingStringToSeg.put(x, newId)
+      newId
+    } else
+      res
+  }
+  
+  def apply(x: SegmentType): String =
+    mappingSegToString.get(x)
+}
+
+
 object `package` {
   type SegmentType = Int
 //  type WordType = Array[SegmentType]//ImmutableList[SegmentType]
@@ -52,7 +77,7 @@ object `package` {
     val res = new StringBuilder
     for (i: Int <- w){ 
 //      res.append(SymbolTable(w.get(i)))
-      res.append(SymbolTable(i))
+      res.append(SymbolSegTable(i))
     }
     res.mkString(sep)
   }

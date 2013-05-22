@@ -1,6 +1,6 @@
 package npbayes
 
-import npbayes.wordseg.data.SymbolTable
+import npbayes.wordseg.data.SymbolSegTable
 import scala.collection.mutable.OpenHashMap
 import scala.collection.mutable.HashMap
 
@@ -103,14 +103,14 @@ class WordType(private val array:Array[Int],private val start:Int, private val e
     var i = start
     while (i<end) {
       if (i > start) buf += ' '
-      buf.append(SymbolTable(array(i)))
+      buf.append(SymbolSegTable(array(i)))
       i += 1
     }
     if (finalSeg == -1)
       "("+buf.toString+","+hashCode+")"
     else {
       buf.append(' ')
-      buf.append(SymbolTable(finalSeg))
+      buf.append(SymbolSegTable(finalSeg))
       "("+buf.toString+","+hashCode+")"
     }
   }  

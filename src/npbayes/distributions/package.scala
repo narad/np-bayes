@@ -1,6 +1,18 @@
+/**
+ * npbayes.distributions
+ * 
+ * provides both sampling and evaluation functionalities for some standard
+ * distributions, such as Gaussians, Gammas, Betas, Dirichlets.
+ * 
+ * ==Overview==
+ * The entire package consists of the distributions object which provides (static) functions. For each distribution,
+ * there is usually a pair of functions, one to evaluate a pdf at a specific point and one to sample from the pdf.
+ */
+
 package npbayes
 import org.apache.commons.math3.distribution.NormalDistribution
 import scala.util.Random.nextDouble
+
 
 package object distributions {
 
@@ -8,7 +20,10 @@ package object distributions {
     * taken from factorie: https://code.google.com/p/factorie/source/browse/src/main/scala/cc/factorie/maths/Random.scala 
     */
    /** Return a random double drawn from a Gaussian distribution with mean 0 and variance 1. */
-	def nextGaussian() : Double = {
+	/**
+	 * @return
+	 */
+	def nextGaussian() : Double = { 
 	      val v1 = nextDouble()
 	      val v2 = nextDouble()
 	      val x1 = math.sqrt(-2*math.log(v1))*math.cos(2*math.Pi*v2)
@@ -28,20 +43,15 @@ package object distributions {
 	def logGaussian(mean: Double, s2: Double, x: Double) =
 	  -math.log(math.sqrt(2*math.Pi*s2)) -math.pow(x-mean,2)/(2*s2)
 	
-    def normalVariate(mu:Double, sigma: Double): Double = 
-      new org.apache.commons.math3.distribution.NormalDistribution(mu,sigma).sample()
-    
-    def normal(x: Double,mu: Double, sigma: Double): Double =
-      new org.apache.commons.math3.distribution.NormalDistribution(mu,sigma).density(x)
+  
   
     /**
      * inefficient rejection sampling...
      */
 	def truncatedNormalVariate(mu: Double, sigma: Double, a: Double=0, b: Double = Double.PositiveInfinity): Double = {
-	  val normal = new NormalDistribution(mu, sigma)
-	  var res = normal.sample()
+	  var res = nextGaussian(mu,sigma)
 	  while (res<a || res>b)
-	    res = normal.sample
+	    res = nextGaussian(mu,sigma)
 	  res
 	}
 	
