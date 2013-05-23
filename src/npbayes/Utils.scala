@@ -1,12 +1,15 @@
 package npbayes
-/**
- * convenience functions
- */
 
 import scala.collection.mutable.HashMap
 import scala.util.Random
 import org.apache.commons.math3.special.Gamma
 import scala.collection.mutable.ListBuffer
+
+
+/**
+ * convenience functions
+ */
+
 
 /**
  * Jason Naradowsky's Argument parser

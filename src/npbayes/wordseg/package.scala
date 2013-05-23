@@ -1,13 +1,18 @@
 package npbayes
 
-import npbayes.wordseg.data.SymbolSegTable
+
 import scala.collection.mutable.OpenHashMap
 import scala.collection.mutable.HashMap
+import npbayes.wordseg.data.SymbolSegTable
+
+
+
+
 
 /**
  * taken from Percy Liangs TEA utilities
  */
-class SubArray[A](private val array:Array[A], private val start:Int, private val end:Int) extends RandomAccessSeq[A] {
+class SubArray[A](private val array:Array[A], private val start:Int, private val end:Int) extends IndexedSeq[A] {
   /**
    * does a content-based hash
    */
