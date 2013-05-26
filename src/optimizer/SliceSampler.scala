@@ -107,7 +107,7 @@ class SliceSampler(logpdf: (Double=>Double),min_x: Double, max_x: Double)
 		x
 	}
 	
-	def max(a: Double, b: Double){
+	def max(a: Double, b: Double): Double = {
 		if(a >= b)
 		  a
 		else

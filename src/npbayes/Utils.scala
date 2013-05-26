@@ -1,12 +1,15 @@
 package npbayes
-/**
- * convenience functions
- */
 
 import scala.collection.mutable.HashMap
 import scala.util.Random
 import org.apache.commons.math3.special.Gamma
 import scala.collection.mutable.ListBuffer
+
+
+/**
+ * convenience functions
+ */
+
 
 /**
  * Jason Naradowsky's Argument parser
@@ -191,4 +194,15 @@ object Utils {
 	  } else
 	    (alpha-1)*math.log(x)+(beta-1)*math.log(1-x)+Gamma.logGamma(alpha+beta)-Gamma.logGamma(alpha)-Gamma.logGamma(beta);
 	}	
+	
+	
+	/**
+	 * from stackexchange: http://stackoverflow.com/questions/9547160/how-to-measure-time-of-a-statement-in-scala-console
+	 */
+	def time[A](f: => A) = {
+		val s = System.nanoTime
+		val ret = f
+		println("time: "+(System.nanoTime-s)/1e6+"ms")
+		ret
+	}
 }

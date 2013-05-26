@@ -22,7 +22,7 @@ import scala.collection.mutable.LinkedList
 import scala.collection.mutable.ListBuffer
 import java.io.PrintStream
 
-abstract case class LexGenerator
+abstract class LexGenerator
 case object UNIUNLEARNED extends LexGenerator
 case object UNILEARNED extends LexGenerator
 case object UNILEARNEDVOWELS extends LexGenerator
@@ -91,7 +91,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 
 object wordseg {
 	var hyperSampleFile: PrintStream = null
-    var dropInferenceMode: ScalaObject = IGNOREDROP
+    var dropInferenceMode: DROPINFERENCEMODE = IGNOREDROP
     var isConsonant: Identifier = null
     def isVowel(x: SegmentType) = SymbolClassTable(PhonemeClassMap.getClass(x))=="VOWL"
     var isPause: Identifier = null
