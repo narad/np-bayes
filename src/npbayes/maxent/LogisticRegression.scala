@@ -68,24 +68,17 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
   }
   
   /**
-   * Calculate the gradient of the NLL, to be used by optimization functions
-   * cf Murphy p. 247
+   * perform MAP-inference using LBFGS
    */
-  def gradient = 
-    new DiffFunction[DenseVector[Double]] {
-      def calculate(x: DenseVector[Double]) = {
-        val nll = -loglikelihood(x)
-        val mu_y = (inputs * weights).map(sigmoid(_)) - outputs
-        val res = inputstranspose*mu_y
-        (nll,res+x) //l2-regularizer, make generic for differentiable priors
-      }    
-    
+  def mapLBFGS(start: DenseVector[Double]=weights,maxIters:Int=100,m: Int=3) = {
+    val lbfgs = new breeze.optimize.LBFGS[DenseVector[Double]](maxIters,m)
+    weights = lbfgs.minimize(gradient, start)
   }
   
   /**
-   * Newton method to find optimal weights using full Hessian
+   * perform MAP-inference using Newton's method
    */
-  def newtonsMethod(start: DenseVector[Double]=weights,threshold: Double = 0.01, maxIters: Int=20, pstepSize: Double=0.5) = {
+  def mapNewtonsMethod(start: DenseVector[Double]=weights,threshold: Double = 0.0001, maxIters: Int=100, pstepSize: Double=1.0) = {
     weights = start
     var oldL = loglikelihood()                   
     var newL = Double.NegativeInfinity
@@ -100,27 +93,26 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
       val d = H_inv*g
       val newW = weights - d*stepSize
       newL = loglikelihood(newW)
+      deltaLL = (newL-oldL).abs
       if (newL<oldL) {
         stepSize = stepSize / 2.0
-        deltaLL = (newL-oldL).abs
         //println("half step-size (now "+stepSize+")")
       } else {
         stepSize = 1.2 * stepSize
     	//println("increase step-size (now "+stepSize+")")
-        weights = newW
-        deltaLL = (newL-oldL).abs        
+        weights = newW        
         oldL = newL
       }
 //      println(oldL+" "+weights)
       iters+=1      
     }
-    //println("# loglikelihood after "+iters+" iterations: "+oldL)    
+//    println("# loglikelihood after "+iters+" iterations: "+oldL+" (deltaLL "+deltaLL+")")    
   }
   
   /**
-   * Gradient descent
+   * perform MAP inference using Gradient descent
    */
-  def gradientDescent(start: DenseVector[Double]=weights, threshold: Double = 0.001, maxIters: Int=20, pstepSize: Double=0.5) = {
+  def mapGradientDescent(start: DenseVector[Double]=weights, threshold: Double = 0.0001, maxIters: Int=100, pstepSize: Double=0.5) = {
     weights = start
     var oldL = loglikelihood()           
     var newL = Double.NegativeInfinity
@@ -133,22 +125,36 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
       g./=(g.norm(2.0)) //normalize
       val newW = weights - g*stepSize
       newL = loglikelihood(newW)
+      deltaLL = (newL-oldL).abs      
       if (newL<oldL) {
         stepSize = stepSize / 2.0
-        deltaLL = 10*threshold //make sure this won't be accepted
         //println("half step-size (now "+stepSize+")")
       } else {
         stepSize = 1.2 * stepSize
     	//println("increase step-size (now "+stepSize+")")
         weights = newW
-        deltaLL = (newL-oldL).abs
         oldL = newL
       }
       iters+=1
     }
-    println("# loglikelihood after "+iters+" iterations: "+oldL)
+    println("# loglikelihood after "+iters+" iterations: "+oldL+" (deltaLL: "+deltaLL+")")
   }
   
+  /**
+   * Calculate the gradient of the NLL, to be used by optimization functions
+   * cf Murphy p. 247
+   */
+  def gradient = 
+    new DiffFunction[DenseVector[Double]] {
+      def calculate(x: DenseVector[Double]) = {
+        val nll = -loglikelihood(x)
+        val mu_y = (inputs * x).map(sigmoid(_)) - outputs
+        val res = inputstranspose*mu_y
+        (nll,res+x) //l2-regularizer, make generic for differentiable priors
+      }    
+    
+  }
+
   
   /**
    * Builds the Hessian for the NEGATIVE log-likelihood
@@ -159,7 +165,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     var j=0
     val dim=w.size
     val H = breeze.linalg.DenseMatrix.fill(dim, dim)(0.0)
-    val mu_1_mu = (inputs*weights).map(sigmoidprime(_))
+    val mu_1_mu = (inputs*w).map(sigmoidprime(_))
     def secondDeriv(x1: Int, x2: Int) = {
       var res = 0.0
       var ex = 0
@@ -181,7 +187,6 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     // with l2-regularizer
     H + breeze.linalg.Matrix.ones[Double](dim,dim)
   }
-  
   
   /**
    * Calculate Hessian of NEGATIVE loglikelihood using Matrix-multiplications
