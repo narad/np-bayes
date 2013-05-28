@@ -67,12 +67,22 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     outputs = DenseVector(out)
   }
   
+ 
+  
   /**
    * perform MAP-inference using LBFGS
    */
   def mapLBFGS(start: DenseVector[Double]=weights,maxIters:Int=100,m: Int=3) = {
     val lbfgs = new breeze.optimize.LBFGS[DenseVector[Double]](maxIters,m)
     weights = lbfgs.minimize(gradient, start)
+  }
+  
+  
+  /**
+   * see HelmsHold2006
+   */
+  def helmsHoldGibbs(start: DenseVector[Double]=weights) = {
+	  
   }
   
   /**

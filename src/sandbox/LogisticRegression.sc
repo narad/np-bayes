@@ -5,7 +5,6 @@ package sandbox
  */
 import scala.collection.mutable.ArrayBuffer
 import npbayes.maxent
-import npbayes.distributions.Categorical
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 
@@ -42,6 +41,8 @@ object LogisticRegression {
     				}
     temp
   }                                               //> features2: (x: String)Array[Double]
+  
+  
   
   def features1(x: String): Array[Double] = {
     val parsed = x.split(" ")
@@ -157,26 +158,27 @@ object LogisticRegression {
   def const(x: DenseVector[Double]) = 0.0         //> const: (x: breeze.linalg.DenseVector[Double])Double
   val l = new maxent.LogisticRegression[String](3,features2)
                                                   //> l  : npbayes.maxent.LogisticRegression[String] = npbayes.maxent.LogisticReg
-                                                  //| ression@61245c4f
+                                                  //| ression@28839907
   l.setInputs(X)
   l.setOutputs(Y)
      
 
   val zero = l.weights                            //> zero  : breeze.linalg.DenseVector[Double] = DenseVector(0.0, 0.0, 0.0)
-  npbayes.Utils.time(l.mapLBFGS(zero))            //> time: 2044.737063ms
+  npbayes.Utils.time(l.mapLBFGS(zero))            //> time: 2780.797112ms
   l.loglikelihood(l.weights)                      //> res0: Double = -23507.965961716196
   l.weights                                       //> res1: breeze.linalg.DenseVector[Double] = DenseVector(-1.2862729789490261, 
                                                   //| -0.5438148343219444, -1.8430377965350306)
   
   npbayes.Utils.time(l.mapGradientDescent(zero))  //> # loglikelihood after 35 iterations: -23507.968345147514 (deltaLL: 2.750221
                                                   //| 0286911577E-6)
-                                                  //| time: 506.132121ms
+                                                  //| time: 469.497833ms
   l.loglikelihood()                               //> res2: Double = -23507.968345147514
   l.weights                                       //> res3: breeze.linalg.DenseVector[Double] = DenseVector(-1.2871515429903362, 
                                                   //| -0.5442814771060918, -1.8441145966004293)
 
-  npbayes.Utils.time(l.mapNewtonsMethod(zero))    //> time: 525.211347ms
+  npbayes.Utils.time(l.mapNewtonsMethod(zero))    //> time: 542.716497ms
   l.loglikelihood()                               //> res4: Double = -23507.96624948633
   l.weights                                       //> res5: breeze.linalg.DenseVector[Double] = DenseVector(-1.2861948401027414, 
                                                   //| -0.543827329418325, -1.843318271073049)
+                                                   
 }
