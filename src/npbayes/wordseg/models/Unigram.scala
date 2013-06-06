@@ -21,6 +21,7 @@ import optimizer.samplers1D
 import npbayes.WordType
 import org.apache.commons.math3.analysis.UnivariateFunction
 import org.apache.commons.math3.optimization.univariate.BrentOptimizer
+import breeze.optimize.LBFGS
 
 
 
@@ -42,11 +43,11 @@ case class UnigramFinalContext(val wO: WordType, val wU: WordType, val wD: WordT
 					  
 
 class Unigram(val corpusName: String,concentration: Double,discount: Double=0,val pWB: Double = 0.5, val assumption: HEURISTIC = EXACT,val dropSeg: String = "KLRK", val dropInd: String = "KLRK", val dropProb: Double =0.0,
-				val contextModel: DeletionModel, val lexgen: LexGenerator) extends WordsegModel {
+    val lexgen: LexGenerator) extends WordsegModel {
 	require(0<=discount && discount<1)
 	require(if (discount==0) concentration>0 else concentration>=0)
-	val betaUB = 2.0
-	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"0","0",contextModel)
+	val betaUB = 2.0 
+	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"0","0",Data.featuresPN)
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
 	//val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	val pypUni = {
@@ -71,11 +72,11 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	var noToBound = 0
 	
 	
-	def evaluate =
-	  data.evaluate.toString
+//	def evaluate =
+//	  data.evaluate.toString
 	
 	def boundaries = data.boundaries
-	def rules = data.rules
+//	def rules = data.rules
 	def nTokens = pypUni._oCount
 
 	def update(w: WordType) = pypUni.update(w)
@@ -107,52 +108,45 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  (nUtterances+betaUB/2.0)/(nTokens+betaUB+phantomCustomers)
 	}
 	   
-	
+
 	/**
-	 * initializes the CRP with the counts
+	 * initializes the data and the model
 	 */
-	def init(gold:Boolean = false, binitProb:Double = 0.5) = { 
-	  def inner(sPos: Int,cPos: Int): Unit = 
-	    if (cPos>=boundaries.length)
+	override def init(gold:Boolean = false, binitProb:Double = 0.5) = { 
+	  def inner(bPos: Int): Unit = 
+	    if (bPos>=data.nBoundaries)
 	      Unit
 	    else 
-	      boundaries(cPos) match {
-	      	case NoBoundary => inner(sPos,cPos+1)
-	      	case WBoundary => {
-	      	  val context = medialContext(cPos)
-	          update(context.w1U)
-	      	  data.addTransformation(data.whichTransform(context.w1O, context.w1U),context.w1U, context.rU)
- 	      	  inner(cPos+1,cPos+1)
-	      	}
-	      	case UBoundary => {
-	      	  val context = finalContext(cPos)
-	      	  update(context.wU)
- 	      	  data.addTransformation(data.whichTransform(context.wO, context.wU),context.wU, data.UBOUNDARYWORD)
-	      	  nUtterances+=1	      	  
- 	      	  inner(cPos+1,cPos+1) 	      	  
-	      	}
-	  }
+	      boundaries(bPos) match {
+	      	case false => inner(bPos+1)
+	      	case true =>
+	      	  update(data.getUnderlyingWordAt(bPos))
+	      	  if (data.uboundaries(bPos)) 
+		      	  nUtterances+=1	      	  
+ 	      	  inner(bPos+1)	      	    
+	      	  }
 	  if (gold) {
-	    data.boundaries=data.goldBoundaries.clone
-	    data.rules=data.goldRules.clone
-	    for (i <- 1 until data.rules.length) {
-	      if (data.rules(i)==Del1)
-	        data.rules(i)=NoRule
-	    }	    
+	    data.boundaries.clear
+	    data.boundaries++=data.goldboundaries
+	    data.buildWords
+	  } else {
+	    data.boundaries.clear()
+	    data.boundaries++=data.randomBoundaries(binitProb)
+	    data.buildWords
 	  }
-	  val res = inner(1,1)
+	  val res = inner(0)
+//	  data.updateDel1Model //don't initialize...
 	  if (wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
-	  res
 	}	
 
 	
-   def hyperParam: String = "alpha0 "+pypUni.concentration
+   override def hyperParam: String = "alpha0 "+pypUni.concentration
    
 
    
    
-   def resampleConcentration(hsiters: Int = 1) = {
+   override def resampleConcentration(hsiters: Int = 1) = {
       def proposallogpdf(x: Double,y: Double): Double = {
         math.log(gaussian(y,math.abs(y)*wordseg.wordseg.hsmhvar,x))
       }
@@ -187,70 +181,32 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	  pypUni.concentration = alpha0 
 	}	  
 	
-   def optimizeConcentration = {
-	  val tmpOptim = new BrentOptimizer(0.00001,0.000001)
-
-      val logpdf = new UnivariateFunction {
-        def value(alpha: Double) = {
+   override def optimizeConcentration = {
+      def logpdf(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
-      }
-      pypUni.concentration = tmpOptim.optimize(20, logpdf, org.apache.commons.math3.optimization.GoalType.MAXIMIZE, 0.0, 32768.0).getPoint() 
+      
+      pypUni.concentration = optimizer.approxGradientDescent1D(pypUni.concentration,logpdf)  
 	}	  
 
    
-   def sanity =
+   override def sanity =
 	  pypUni.sanityCheck
 	
-	/**
-	 * context utterance medial ==> w1, w2, w1w2, isFinal-information
-	 */
-	def medialContext(pos: Int) = {
-	  assert(pos>0 && boundaries(pos)!=UBoundary && pos<(boundaries.length-1))
-	  val w1Start = data.boundaryToLeft(pos-1)
-	  val w2End = data.boundaryToRight(pos+1)
-	  val (w1O,w1U,w1D) = data.getWordWithVar(w1Start, pos)
-	  val (w2O,w2U) = data.getWord(pos, w2End)
-	  val (w1w2O,w1w2U) = data.getWord(w1Start,w2End)
-	  data.boundaries(w2End) match {
-	    case UBoundary =>
-	      new UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,data.UBOUNDARYWORD,data.UBOUNDARYWORD)
-	    case _ =>
-	      val rightEnd = data.boundaryToRight(w2End+1)
-		  val (rightO,rightU) = data.getWord(w2End,rightEnd)
-		  new UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rightO,rightU)
-	  }
-	}
-	
-	/**
-	 * context utterance final ==> w1
-	 */
-	def finalContext(pos: Int) = {
-	  assert(pos>0 && boundaries(pos)==UBoundary)
-	  val w1Start = data.boundaryToLeft(pos-1)
-	  val (w1O,w1U,w1D) = data.getWordWithVar(w1Start, pos)
-	  new UnigramFinalContext(w1O,w1U,w1D)
-	}
-	
-
-	def boundaryContext(pos: Int): UContext = boundaries(pos) match {
-	  case UBoundary => finalContext(pos)
-	  case _ => medialContext(pos)
-	}
 	
 	/**
 	 * whether or not a drop occured is handled fully by what you pass
 	 * dpseg2 ignores the final continuation-probability (cont2)
 	 */
-	def _boundary(w1Under: WordType,w2Under: WordType,w1Obs: WordType,w2Obs: WordType, rU: WordType, rO: WordType) = {
+	def _boundary(w1Under: WordType,w2Under: WordType,w1Obs: WordType,w2Obs: WordType, rU: WordType) = {
 	  val predw1 = pypUni(w1Under)
 	  val predw2 = pypUni(w2Under)//,List(w1Under))
 	  val cont1 = (1-_predBoundary())
 	  val isFinal = rU==data.UBOUNDARYWORD
 	  val cont2 = if (isFinal) _predBoundary(1) else (1-_predBoundary(1))
-	  predw1 *  toSurface(w1Under,w1Obs,rU) * cont1 * 
+	  predw1 *  toSurface(w1Under,w1Obs,w2Under) * cont1 * 
 	  predw2 * toSurface(w2Under,w2Obs,rU) * cont2
 	}
 
@@ -258,7 +214,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	/**
 	 * dpseg2 ignores the word-final factor (cont), leading to different results
 	 */
-	def _noBoundary(w1w2Under: WordType, w1w2Obs: WordType, rU: WordType, rO: WordType) = {
+	def _noBoundary(w1w2Under: WordType, w1w2Obs: WordType, rU: WordType) = {
 	  val predw1w2 = pypUni(w1w2Under)
 	  val isFinal = rU==data.UBOUNDARYWORD
 	  val cont = if (isFinal) _predBoundary() else (1-_predBoundary())
@@ -272,98 +228,100 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	 * returns a distribution over all possible ways to resample
 	 * a boundary position
 	 */
-	def _calcMedialHypotheses(w1O: WordType,w1D: WordType,
-					  w2O: WordType,w2U: WordType,
-					  w1w2O: WordType, w1w2U: WordType, rU: WordType, rO: WordType): Categorical[(Boundary,Rule)] = {
+	def _calcMedialHypotheses(c: MedialContext): Categorical[(Boundary,Rule)] = {
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  res.add((NoBoundary,NoRule),
-	      _noBoundary(w1w2U,w1w2O,rU,rO))
+	      _noBoundary(c.w12U,c.w12O,c.rightU))
 	  if (wordseg.wordseg.dropInferenceMode != IGNOREDROP && !wordseg.wordseg.isAnnealing) {
 		  res.add((WBoundary,Del1),
-				  _boundary(w1D,w2U,w1O,w2O,rU,rO))
+				  _boundary(c.w1D1,c.w2U,c.w1O,c.w2O,c.rightU))
+		  res.add((WBoundary,Del2),
+				  _boundary(c.w1D2,c.w2U,c.w1O,c.w2O,c.rightU))		
 	  }
-	  val tRule = if (w1O.lastSeg==data.DROPSEG1)
-		  			Del1
-		  		  else
-		  		    NoRule
-	  res.add((WBoundary,tRule),
-	      _boundary(w1O,w2U,w1O,w2O,rU,rO))
+	  res.add((WBoundary,NoRule),
+			  _boundary(c.w1O,c.w2U,c.w1O,c.w2O,c.rightU))
 	  assert(res.partition>0)
 	  res
 	}
 	
-	def _calcFinalHypotheses(w1O: WordType, w1D: WordType): Categorical[(Boundary,Rule)] = {
+	def _calcFinalHypotheses(c: FinalContext): Categorical[(Boundary,Rule)] = {
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  if (wordseg.wordseg.dropInferenceMode != IGNOREDROP && !wordseg.wordseg.isAnnealing) {
 		  res.add((UBoundary,Del1),
-		      _pronProb(w1D, w1O,data.UBOUNDARYWORD,data.UBOUNDARYWORD))
+		      _pronProb(c.w1D1, c.w1O,data.UBOUNDARYWORD,data.UBOUNDARYWORD))
+		  res.add((UBoundary,Del2),
+		      _pronProb(c.w1D2, c.w1O,data.UBOUNDARYWORD,data.UBOUNDARYWORD))		      
 	  }
-	  val tRule = if (w1O.lastSeg==data.DROPSEG1) Del1 else NoRule
-	  res.add((UBoundary,tRule),
-	      _pronProb(w1O,w1O,data.UBOUNDARYWORD,data.UBOUNDARYWORD))
+	  res.add((UBoundary,NoRule),
+			  _pronProb(c.w1O,c.w1O,data.UBOUNDARYWORD,data.UBOUNDARYWORD))
 	  assert(res.partition>0)
 	  res
 	}
 	
-	def _calcHypotheses(context: UContext): Categorical[(Boundary,Rule)] = {
-		context match {
-		  case UnigramFinalContext(w1O,w1U,w1D) => _calcFinalHypotheses(w1O,w1D)
-		  case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO) => 
-		    _calcMedialHypotheses(w1O,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO)
-		}
-	}
-	
-	def updateBoundary(pos: Int, br:(Boundary,Rule), context: UContext) = {
-	  val (b,r) = br
-	  val hasChanged = boundaries(pos)!=b
-	  data.setBoundary(pos, b)
-	  data.setRule(pos, r)
+	def _calcHypotheses(context: AContext): Categorical[(Boundary,Rule)] = 
 	  context match {
-	    case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO) =>
+	  	case c: FinalContext => _calcFinalHypotheses(c)
+	  	case c: MedialContext => _calcMedialHypotheses(c)
+	  }
+	  
+	
+	
+	def updateBoundary(pos: Int, br:(Boundary,Rule), context: AContext) = {
+	  val (b,r) = br
+	  context match {
+	    case MedialContext(_,w1U,w1O,w1D1,w1D2,w2U,w2O,w12U,w12O,rU,w1Pos) =>
 	      	val isFinal = rU==data.UBOUNDARYWORD 
 	    	b match {
 	    	  case NoBoundary => 
-	    	    update(w1w2U)
-	    	  case WBoundary => 
+	    	    update(w12U)
+	    	    data.insertWord(w1Pos, (w12U,w12O))
+	    	  case WBoundary =>
+	    	    data.boundaries+=pos
 	    	    r match {
 	    	      case Del1 =>
-	    	        update(w1D)
-	    	        data.addTransformation(r,w1D, w2U)
-	    	      case Rel1 | NoRule =>
+	    	        update(w1D1)
+	    	        data.insertWord(w1Pos, (w1D1,w1O))
+	    	      case Del2 =>
+	    	        update(w1D2)
+	    	        data.insertWord(w1Pos, (w1D2,w1O))
+	    	      case NoRule =>
 	    	        update(w1O)
-	    	        data.addTransformation(r,w1O,w2U)
+	    	        data.insertWord(w1Pos, (w1O,w1O))
 	    	    }
-	    	    update(w2U)
+    	        update(w2U)
+    	        data.insertWord(pos,(w2U,w2O))
 	    	}
 	    	if (isFinal) nUtterances+=1
-	    case UnigramFinalContext(w1O,w1U,w1D) =>
+	    case FinalContext(_,w1U,w1O,w1D1,w1D2,w1Pos) =>
 	      r match {
 	        case Del1 =>
-	          update(w1D)
-	          data.addTransformation(r,w1D, data.UBOUNDARYWORD)	          
-	        case Rel1 | NoRule =>
+	          update(w1D1)
+	          data.insertWord(w1Pos, (w1D1,w1O))
+	        case Del2 =>
+	          update(w1D2)
+	          data.insertWord(w1Pos, (w1D2,w1O))	              
+	        case NoRule =>
 	          update(w1O)
-     		  data.addTransformation(r,w1O, data.UBOUNDARYWORD)
+	          data.insertWord(w1Pos, (w1O,w1O))
 	      }
 	  }
+//	  println("Insert a"+r+" unigram restaurant: "+pypUni.labelTabels)	  
 	  if (wordseg.DEBUG) {
 		  assert(pypUni.sanityCheck)
 	  }
 	}
 	
-	def removeAssociatedObservations(context: UContext, boundary: Boundary, rule: Rule) = {//hasBoundary: Boolean) =
+	def removeAssociatedObservations(context: AContext, boundary: Boolean) = {//hasBoundary: Boolean) =
 	  context match {
-	  case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO) =>
+	  case MedialContext(_,w1U,w1O,w1D1,w1D2,w2U,w2O,w1w2U,w1w2O,rU,w1Pos) =>
 	    val isFinal=rU==data.UBOUNDARYWORD
 	    if (isFinal) nUtterances-=1
-	    if (boundary==WBoundary) {
-	      data.removeTransformation(rule, w1U, w2U)        	      
+	    if (boundary) {        	      
 	      remove(w1U)
 	      remove(w2U)
 	    } else
 	    	remove(w1w2U)
-	  case UnigramFinalContext(w1O,w1U,w1D) =>
-	    data.removeTransformation(rule, w1U, data.UBOUNDARYWORD)
+	  case FinalContext(_,w1U,w1O,_,_,_) =>
 	    remove(w1U)
 	  }
 	  if (wordseg.DEBUG) {
@@ -372,8 +330,9 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	}
 	
 	def resample(pos: Int, anneal: Double=1.0): Unit = {
-	    val context = boundaryContext(pos)
-		removeAssociatedObservations(context,boundaries(pos),rules(pos))//==WBoundaryDrop || boundaries(pos)==WBoundaryNodrop)
+	    val boundary = boundaries(pos)
+	    val context = data.removeBoundary(pos)
+		removeAssociatedObservations(context,boundary)
 		val result = _calcHypotheses(context)
 		if (anneal==1.0)
 		  updateBoundary(pos, result.sample,context)
@@ -381,90 +340,61 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 		  updateBoundary(pos, result.sample(anneal),context)
 	}
 	
-	def gibbsSweep(anneal: Double=1.0): Double = {
-	  for (i: Int <- 1 until boundaries.length) { 
+	override def gibbsSweep(anneal: Double=1.0): Double = {
+	  for (i: Int <- 1 to data.nBoundaries) {
+//		  println("Resample "+i)
 		  resample(i,anneal)
 	  }
+	  data.updateDel1Model
 	  logProb
 	}
 
-  def __reseatProbsFinal(w1D: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
+  def __reseatProbsFinal(w1D1: WordType, w1D2: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  val tRule = data.whichTransform(w1O, w1O)
-	  res.add((UBoundary,Del1), pypUni(w1D)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
-	  res.add((UBoundary,tRule), pypUni(w1O)*toSurface(w1O,w1O,data.UBOUNDARYWORD))
+	  res.add((UBoundary,Del1), pypUni(w1D1)*toSurface(w1D1, w1O,data.UBOUNDARYWORD))
+//	  res.add((UBoundary,Del2), pypUni(w1D2)*toSurface(w1D2, w1O,data.UBOUNDARYWORD))
+	  res.add((UBoundary,NoRule), pypUni(w1O)*toSurface(w1O,w1O,data.UBOUNDARYWORD))
 	  res
 	}
   
-  def __reseatProbs(w1D: WordType, w1O: WordType,rU: WordType, rO: WordType): Categorical[(Boundary,Rule)] = {
+  def __reseatProbs(w1D1: WordType, w1D2: WordType, w1O: WordType,rU: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  val tRule = data.whichTransform(w1O, w1O)
-	  res.add((WBoundary,Del1), pypUni(w1D)*toSurface(w1D, w1O,rU))
-	  res.add((WBoundary,tRule), pypUni(w1O)*toSurface(w1O,w1O,rU))
+	  res.add((WBoundary,Del1), pypUni(w1D1)*toSurface(w1D1, w1O,rU))
+//	  res.add((WBoundary,Del2), pypUni(w1D2)*toSurface(w1D2, w1O,rU))	  
+	  res.add((WBoundary,NoRule), pypUni(w1O)*toSurface(w1O,w1O,rU))
 	  res
 	}
 	
 	def resampleWords(pos: Int, anneal: Double) = {
 	  boundaries(pos) match {
-	    case NoBoundary => Unit
-	    case _ =>
-		    val context = boundaryContext(pos)
-		    removeAssociatedObservations(context, boundaries(pos),rules(pos))
+	    case false => Unit
+	    case true =>
+	      	val boundary = boundaries(pos)
+		    val context = data.removeBoundary(pos)
+		    removeAssociatedObservations(context, boundary)
 		    context match {
-		    	case UnigramMedialContext(w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rU,rO) =>
-		    		val res = __reseatProbs(w1D, w1O,rU,rO)
+		    	case MedialContext(_,w1U,w1O,w1D1,w1D2,w2U,w2O,w1w2U,w1w2O,rU,w1Pos) =>
+		    		val res = __reseatProbs(w1D1, w1D2, w1O,rU)
 		    		updateBoundary(pos, res.sample(anneal),context)
-		    	case UnigramFinalContext(wO,wU,wD) =>
-		    	  val res = __reseatProbsFinal(wD,wO)
+		    	case FinalContext(_,wU,wO,wD1,wD2,wPos) =>
+		    	  val res = __reseatProbsFinal(wD1,wD2,wO)
 		    	  updateBoundary(pos, res.sample(anneal),context)
 		    }	      
 	  }
 	}
 	
-	def gibbsSweepWords(anneal: Double=1.0): Double = {
-	  for (i: Int <- 1 until boundaries.length) {
+	override def gibbsSweepWords(anneal: Double=1.0): Double = {
+//	  println("deletionpoints: "+data.del1s+" words: "+data.words)
+	  for (i: Int <- 1 to data.uboundaries.last) {
 		  resampleWords(i,anneal)
 	  }
+	  data.updateDel1Model
 	  logProb
 	}
 	
-	def removeSentence(sentence:(Int,Int)): (Vector[Boundary],Double) = {
-	  var lprob = 0.0
-	  var spos=sentence._1
-	  var isFinal = false
-	  while (!isFinal) {
-	    val epos = data.boundaryToRight(spos+1)
-	    isFinal = data.boundaries(epos) match {
-	      case UBoundary => true
-	      case _ => false
-	    }
-	    val (wO,wU) = data.getWord(spos,epos)
-	    println(spos+" "+epos+"="+wO)
-	    lprob+=math.log(remove(wU))
-	    if (!isFinal) {
-	      lprob += math.log(1-_predBoundary()) 
-	    }
-	    spos = epos
-	  }
-	  nUtterances-=1
-	  lprob+=math.log(_predBoundary())
-	  (Vector.empty[Boundary].++(data.boundaries.view(sentence._1+1, sentence._2+1)),lprob)
-	}
+	   
 	
-	def mhsResample(sentence:(Int,Int)) = {
-	  val length = data.getSentenceLength(sentence)
-	  val trellis = new Array[(Int,Double)](length)
-	  val (oldSeg,oldSegLP) = removeSentence(sentence)
-	  //trellis[x] stores the highest probability of any segmentation of the string of length x
-	  //and the start-position of its last word as a backpointer
-//	  trellis[0] = (-1,pypUni(data.getWordSentence
-//	  for (bpos <- 1 to length) {
-	    
-	  }
-	  
-	
-	
-	def logProb: Double = {
+	override def logProb: Double = {
 	  val nonFinal = nTokens - nUtterances
 	  val lpBoundaries = Gamma.logGamma(nonFinal+betaUB/2.0)+Gamma.logGamma(nUtterances+betaUB/2.0)+Gamma.logGamma(betaUB)-
 	  						2*Gamma.logGamma(betaUB/2.0)-Gamma.logGamma(nTokens+betaUB)

@@ -1,16 +1,8 @@
 package npbayes.wordseg.data
 
-/**
- * we define a simple beta-prior over the application of each variation rule. consequently, we
- * need to track the number of times with which we observed each individual rule applying / not applying
- */
 
-
-import npbayes.wordseg
-import npbayes.WordType
 import java.io._
 import scala.collection.mutable.HashMap
-//import scala.collection.mutable.OpenHashMap
 import scala.io.Source
 import scala.util.Random
 import scala.collection.mutable.StringBuilder
@@ -21,31 +13,23 @@ import npbayes.wordseg.FIXDROP
 import npbayes.wordseg.INFERDROP
 import scala.collection.mutable.ArrayBuffer
 import npbayes.WordType
-import npbayes.WordType
-import npbayes.WordType
+import breeze.linalg.DenseVector
+import npbayes.maxent.LogisticRegression
+import scala.collection.mutable.BitSet
 
 
 
-abstract class DeletionModel
-case object GlobalFix extends DeletionModel
-case object CVPFollows extends DeletionModel
-case object CVPLeftRight extends DeletionModel
+
+abstract class Rule
+case object Del1 extends Rule
+case object Del2 extends Rule
+case object NoRule extends Rule
 
 abstract class Boundary
 case object NoBoundary extends Boundary
 case object WBoundary extends Boundary
 case object UBoundary extends Boundary
 
-abstract class Rule
-case object Del1 extends Rule
-case object Rel1 extends Rule
-case object Del2 extends Rule
-case object Rel2 extends Rule
-case object NoRule extends Rule
-
-abstract class RuleContext
-case class SimpleRContext(rC: PhonemeType) extends RuleContext
-case class SimpleLRContext(lC: PhonemeType,rC: PhonemeType) extends RuleContext
 
 abstract class PhonemeType
 case class PType(x: Int) extends PhonemeType {
@@ -64,186 +48,149 @@ class Identifier(f: String) {
     itemsT.contains(x)
   
   def example: SegmentType =
-    itemsT.head
+    itemsT.head 
 }
 
-class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*", val DROP1: String = "T", val MISSING2: String="DROPD", val DROP2: String = "D", val delModeLType: DeletionModel = GlobalFix) {
+
+abstract class AContext
+case class MedialContext(leftU: WordType,w1U: WordType, w1O: WordType, w1D1: WordType, w1D2: WordType,
+					w2U: WordType, w2O: WordType,w12U: WordType, w12O: WordType, rightU: WordType,
+					w1Start: Int) extends AContext
+
+case class FinalContext(leftU: WordType, w1U: WordType, w1O: WordType, w1D1: WordType, w1D2: WordType,
+						w1Start: Int) extends AContext					
+
+object Data {
+   
+  /**
+    * coarse previous-next feature set 
+    * (prevVwl, prevCons, nextVwl, nextCons, nextPaus)
+    **/ 
+   val featuresPN = (5, {def x(w1w2: (WordType,WordType)): Array[Double] = {
+	    val (w1,w2) = w1w2
+	    val res = Array.fill[Double](5)(0.0)
+	    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
+	    val w2first = PhonemeClassMap.getClass(w2(0))
+	    
+	    res(0) = SymbolClassTable(w1prev) match {
+	  					  case "VOWL" => 1.0
+	  					  case _ => 0.0
+	    		 }
+	    res(1) = SymbolClassTable(w1prev) match {
+	  					  case "CONS" => 1.0
+	  					  case _ => 0.0
+	    		 }    
+	    res(2) = SymbolClassTable(w2first) match {
+	  					  case "VOWL" => 1.0
+	  					  case _ => 0.0
+	    		 }    
+	    res(3) = SymbolClassTable(w2first) match {
+	  					  case "CONS" => 1.0
+	  					  case _ => 0.0
+	    		 }        
+	    res(4) = SymbolClassTable(w2first) match {
+	  					  case "SIL" => 1.0
+	  					  case _ => 0.0
+	    		 }        
+	    res
+   	}
+    x(_)
+   }) 
+
+  /**
+    * coarse next feature set 
+    * (nextVwl, nextCons, nextPaus)
+    **/ 
+   val featuresN = (3, {def x(w1w2: (WordType,WordType)): Array[Double] = {
+	    val (w1,w2) = w1w2
+	    val res = Array.fill[Double](3)(0.0)
+	    val w2first = PhonemeClassMap.getClass(w2(0))
+	    res(0) = SymbolClassTable(w2first) match {
+	  					  case "Vwl" => 1.0
+	  					  case _ => 0.0
+	    		 }    
+	    res(1) = SymbolClassTable(w2first) match {
+	  					  case "Cons" => 1.0
+	  					  case _ => 0.0
+	    		 }        
+	    res(2) = SymbolClassTable(w2first) match {
+	  					  case "Pause" => 1.0
+	  					  case _ => 0.0
+	    		 }        
+	    res
+   	}
+   x(_)
+  })
+}
+
+
+class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*", val DROP1: String = "T", val MISSING2: String="DROPD", val DROP2: String = "D", val nAndFeatures: (Int, ((WordType,WordType))=>Array[Double])=Data.featuresPN) {
 	val _random = new Random()
 	//Special Characters
 	val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
+	val UBOUNDARYWORD=new WordType(Array.fill(1)(SymbolSegTable(UBOUNDARYSYMBOL)),0,1,-1) //always prefix corpus with an additional boundary symbol	  
 	val DROPSEG1=SymbolSegTable(DROP1)
 	val DROPSEG2=SymbolSegTable(DROP2)
-	def isConsonant = wordseg.wordseg.isConsonant
-	def isVowel(x: SegmentType) = wordseg.wordseg.isVowel(x)
-	def isPause = wordseg.wordseg.isPause	
-	//Rules
-	var nD1 = 0
-	var nNotD1 = 0
-	var nD2 = 0
-	var nNotD2 = 0
-	val deleted1: HashMap[RuleContext,Int] = new HashMap
-	val realized1: HashMap[RuleContext,Int] = new HashMap
-	val deleted2: HashMap[RuleContext,Int] = new HashMap
-	val realized2: HashMap[RuleContext,Int] = new HashMap
 	
-	val sentences: ArrayBuffer[(Int,Int)] = new ArrayBuffer //(x,y) refers to a sentence spanning the characters from
+	//logistic regressions
+	val (nFeatures,features) = nAndFeatures
+	val delModel1 = new LogisticRegression[(WordType,WordType)](nFeatures,features)
+	val delModel2 = new LogisticRegression[(WordType,WordType)](nFeatures,features)
 	
+	//data-structures
+	val boundaries = BitSet.empty+0	
+	val (data,goldboundaries,uboundaries,golddel1s,golddel2s,nBoundaries) = init	
+    val words = new HashMap[Int,(WordType,WordType)] //Underlying, Observed
+	val del1s: BitSet = new BitSet() //indicates deletion of Segment1
+	val del2s: BitSet = new BitSet() //indicates deletion of Segment2
 	
 	/**
 	 * Initialize the data and goldBoundaries
 	 */
-	val (data,goldBoundaries,goldRules) = init
-	val UBOUNDARYWORD=new WordType(Array.fill(1)(SymbolSegTable(UBOUNDARYSYMBOL)),0,1,-1) //always prefix corpus with an additional boundary symbol
 	
-	var boundaries = randomBoundaries(wordseg.wordseg.binitProb).toArray
-	var rules = Array.fill[Rule](boundaries.length)(NoRule)
 
 	def init() = {
 		var seqPhones = Vector.empty[Int]
-		var seqBoundaries: Vector[Boundary] = Vector.empty:+UBoundary
-		var seqRules: Vector[Rule] = Vector.empty:+NoRule
-		var startPos = 0
+		val uBoundaries: BitSet = BitSet.empty+0 //always uBoundary at beginning
+		val goldboundaries: BitSet = BitSet.empty+0 //always uBoundary at beginning
+		val golddel1s: BitSet = new BitSet()
+		val golddel2s: BitSet = new BitSet()
+		var bPos = 0
 		var stringPos = 0
 		def processLine(line: String) = {
 			for (w <- line.stripLineEnd.split("\t")) {
 				for (c: String <- w.split(" ")) {
-				seqPhones = seqPhones:+ SymbolSegTable(c)
-					seqBoundaries = seqBoundaries:+NoBoundary
-					seqRules = seqRules:+NoRule
+					seqPhones = seqPhones:+ SymbolSegTable(c)
 					stringPos+=1
+					bPos+=1
 				}
-				//last symbole is Boundary, check for deleted symbols
+				//check for deleted symbols
 				SymbolSegTable(seqPhones.last) match {
 				  case MISSING1 =>
 				    seqPhones = seqPhones.dropRight(1)
-					seqBoundaries = seqBoundaries.dropRight(2):+WBoundary
-					seqRules = seqRules.dropRight(2):+Del1
-				  case DROP1 =>
-				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
-				    seqRules = seqRules.dropRight(1):+ Rel1
+				    bPos-=1
+				    golddel1s+=bPos
 				  case MISSING2 =>
 				    seqPhones = seqPhones.dropRight(1)
-					seqBoundaries = seqBoundaries.dropRight(2):+WBoundary
-					seqRules = seqRules.dropRight(2):+Del2
-				  case DROP2 =>
-				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
-				    seqRules = seqRules.dropRight(1):+ Rel2				    
-				  case _ =>
-				    seqBoundaries = seqBoundaries.dropRight(1):+WBoundary
-				    seqRules = seqRules.dropRight(1):+ NoRule				    
+				    bPos-=1
+				    golddel2s+=bPos				    				    
+				  case _ =>	    
 				}
+				goldboundaries+=bPos				
 			}
-	       // adjust for word-boundaries --- last NoBoundary is in fact a word-boundary			
-			seqBoundaries = seqBoundaries.last match {
-				case WBoundary => seqBoundaries.dropRight(1):+UBoundary
-			}
-			sentences+=((startPos,stringPos))
-			startPos=stringPos
+		   uBoundaries+=bPos
 		}
 		for (l <- Source.fromInputStream(new FileInputStream(fName), "utf-8").getLines) processLine(l)
-		(seqPhones.toArray,seqBoundaries.toArray,seqRules.toArray)
+		(seqPhones.toArray,goldboundaries,uBoundaries,golddel1s,golddel2s,bPos)
 	}
-
-	def segmentToType(segment: SegmentType): PhonemeType = PhonemeClassMap(segment)
-	  
-	def addContext(hm: HashMap[RuleContext,SegmentType],lSegment: SegmentType,rSegment: SegmentType) = {
-	  wordseg.wordseg.dropInferenceMode match {
-	    case INFERDROP(_,_) =>
-	    	delModeLType match {
-	    		case CVPFollows =>
-	    			hm.put(SimpleRContext(segmentToType(rSegment)),
-	    					hm.getOrElse(SimpleRContext(segmentToType(rSegment)), 0)+1)
-	    		case CVPLeftRight =>
-	    			hm.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),
-	    					hm.getOrElse(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),0)+1)
-	    		case _ =>
-	      
-	    	}
-	    case _ =>
-	  }
-	  
-	}
-	
-	def addDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nD1+=1
-	  addContext(deleted1,lSegment,rSegment)
-	}
-
-	def addDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nD2+=1
-	  addContext(deleted1,lSegment,rSegment)
-	}
-	
-	def addNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nNotD1 += 1
-	  addContext(realized1,lSegment,rSegment)
-	}
-
-	def addNoDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nNotD2 += 1
-	  addContext(realized2,lSegment,rSegment)
-	}	
-
-	def removeContext(hm: HashMap[RuleContext,Int],lSegment: SegmentType, rSegment: SegmentType) = {
-	  wordseg.wordseg.dropInferenceMode match {
-	    case INFERDROP(_,_) =>
-		  delModeLType match {
-		    case CVPFollows =>
-		      val old = hm.get(SimpleRContext(segmentToType(rSegment)))
-			  old match {
-			    case Some(x) =>
-			      if (x-1==0)
-			        hm.remove(SimpleRContext(segmentToType(rSegment)))
-			      else
-			        hm.put(SimpleRContext(segmentToType(rSegment)),x-1)
-			    case None =>
-			      throw new Error("In removeDrop("+rSegment+")")
-			  }
-		    case CVPLeftRight =>
-		      val old = hm.get(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
-			  old match {
-			    case Some(x) =>
-			      if (x-1==0)
-			        hm.remove(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)))
-			      else
-			        hm.put(SimpleLRContext(segmentToType(lSegment),segmentToType(rSegment)),x-1)
-			    case None =>
-			      throw new Error("In removeDrop("+lSegment+","+rSegment+")")
-			  	      
-		      }
-		    case _ =>	      
-		  }
-	    case _ =>
-	  }     
-	}	
-	
-	def removeDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nD1 -= 1
-	  removeContext(deleted1,lSegment,rSegment)
-	}
-	
-	def removeDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nD2 -= 1
-	  removeContext(deleted2,lSegment,rSegment)
-	}
-	
-	def removeNoDrop1(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nNotD1 -= 1
-	  removeContext(realized1,lSegment,rSegment)
-	}
-	
-	def removeNoDrop2(lSegment: SegmentType, rSegment: SegmentType) = {
-	  nNotD2 -= 1
-	  removeContext(realized2,lSegment,rSegment)
-	}	
 
 	def whichTransform(observed: WordType, underlying: WordType): Rule = {
 	  val uEndsIn = underlying.lastSeg
 	  val sameLength = observed.size==underlying.size
 	  if (underlying.size>1) {
 	    uEndsIn match {
-	      case DROPSEG1 => if (sameLength) Rel1 else Del1
-	      case DROPSEG2 => if (sameLength) Rel2 else Del2 
+	      case DROPSEG1 => if (sameLength) NoRule else Del1
+	      case DROPSEG2 => if (sameLength) NoRule else Del2 
 	      case _ => NoRule
 	    }
 	  } else {
@@ -251,194 +198,107 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	  }
 	}
 	
-	
 	/**
-	 * takes care of the counts for rule applications
-	 * we can recover trivially
-	 * if underlying ends in t and differs from observed in length --> dropped t
-	 * if underlying ends in t and doesn't differ in length --> realization of t
-	 * if underlying ends in d and differs --> dropped d
-	 * if underlying endsin d and doesn't differ --> realization of d
-	 */
-	def removeTransformation(rule: Rule, underlying: WordType,rightContext: WordType) = {
-	  rule match {
-	    case Rel1 =>
-          removeNoDrop1(underlying(underlying.length-2), rightContext(0))
-	    case Del1 =>
-	      removeDrop1(underlying(underlying.length-2),rightContext(0))
-	    case Rel2 =>
-	      removeNoDrop2(underlying(underlying.length-2), rightContext(0))
-	    case Del2 =>
-	      removeDrop2(underlying(underlying.length-2), rightContext(0))	      
-	    case NoRule =>
-	  }
-	}
-
-	def addTransformation(rule: Rule, underlying: WordType,rightContext: WordType) = {
-	  rule match {
-	    case Rel1 =>
-	        addNoDrop1(underlying(underlying.length-2), rightContext(0))
-	    case Del1 =>
-	        addDrop1(underlying(underlying.length-2),rightContext(0))
-	    case Rel2 =>
-	        addNoDrop2(underlying(underlying.length-2), rightContext(0))
-	    case Del2 =>
-	        addDrop2(underlying(underlying.length-2),rightContext(0))
-	    case NoRule =>
-	  }
-	}
-	
-	
-	/**
-	 * @return	length of the sentence (= number of boundaries)
-	 */
-	def getSentenceLength(x:(Int, Int)): Int =
-	  x._2-x._1
-
-	/**
-	 * randomize boundaries
+	 * random boundaries
 	 */
 	def randomBoundaries(boundProb: Double=0.0) = {
-		var seqBoundaries: Vector[Boundary] = Vector.empty
-		for (b <- goldBoundaries) {
-			b match {
-				case UBoundary => seqBoundaries=seqBoundaries:+UBoundary
-				case WBoundary | NoBoundary => seqBoundaries=seqBoundaries:+{
-					if (_random.nextDouble>boundProb)
-						NoBoundary 
-					else 
-						WBoundary
-				}
-			}
+		var seqBoundaries: BitSet = BitSet.empty+0
+		var i=1
+		while (i<data.length) {
+		  if (uboundaries(i) || _random.nextDouble<boundProb)
+		    seqBoundaries+=i
+		  i+=1
 		}
+		seqBoundaries+=i
 		seqBoundaries
 	}
 	
 	/**
-	 * provides the interface to the outside, distribute from here
+	 * take current segmentation and feed prepare data-structures
+	 * for the logistic regression model
 	 */
-	def dropProb(s: WordType, rContext: SegmentType): Double = delModeLType match {
-	  case GlobalFix => dropProbUniform
-  	  case CVPFollows => dropProbRContext(rContext)
-	  case CVPLeftRight => dropProbContext(s(s.length-2),rContext)	  	    
-	}
-
-	def dropProbUniform = npbayes.wordseg.wordseg.dropInferenceMode match {
-	  case IGNOREDROP =>
-	    throw new Error("Ignoring drop, shouldn't be in dropProbUniform")
-	  case FIXDROP(p) =>
-	    p
-	  case INFERDROP(priorDrop,priorNodrop) =>
-	    (nD1+priorDrop) / (priorDrop+priorNodrop+nD1+nNotD1)
-	}
-
-	def dropProbRContext(rContext: SegmentType): Double = wordseg.wordseg.dropInferenceMode match {
-	  case IGNOREDROP =>
-	    throw new Error("Ignoring drop, Shouldn't be in dropProbRContext")
-	  case INFERDROP(priorDrop,priorNodrop) =>
-		  val dropped = deleted1.getOrElse(SimpleRContext(segmentToType(rContext)), 0)
-		  val notDropped = realized1.getOrElse(SimpleRContext(segmentToType(rContext)), 0)
-		  (dropped + priorDrop) / (dropped + notDropped + priorDrop + priorNodrop)
-	  case FIXDROP(p) =>
-	    if (isConsonant(rContext))
-		    0.37
-		  else if (isVowel(rContext))
-		    0.22
-		    else
-		      0.14
+	def updateDel1Model = {
+	  println("being update")
+	  val relWords = words.filter(x => x._2._1.lastSeg==DROPSEG1 && x._2._1.length>1)
+	  println("Size relWords: "+relWords.size)
+	  val inputs =  relWords.toList.map(f => ((f._2._1,
+	  							  	   getUnderlyingNeighbourAt(f._1+f._2._2.length)))).toArray
+      println("built inputs (size="+inputs.length+")")
+	  if (inputs.length!=0) {
+		  val outputs = relWords.map(f => (if (f._2._1!=f._2._2) 1.0 else 0.0)).toArray
+		  println("built outputs (size="+outputs.size+")")
+	      delModel1.setInputs(inputs)
+	      delModel1.setOutputs(outputs)
+		  println("optimize")
+		  delModel1.mapLBFGS()
+		  println("end update ("+delModel1.weights+")")	      
+	  }
 	}
 	
-	def dropProbContext(lContext: SegmentType, rContext: SegmentType): Double = /*dropProb*/ {
-	  wordseg.wordseg.dropInferenceMode match {
-	    case IGNOREDROP =>
-	      throw new Error("Ignoring drop, Shouldn't be in dropProbRContext")
-	    case INFERDROP(priorDrop,priorNodrop) =>
-	      val dropped = deleted1.getOrElse(SimpleLRContext(segmentToType(lContext),segmentToType(rContext)), 0)
-		  val notDropped = realized1.getOrElse(SimpleLRContext(segmentToType(lContext),segmentToType(rContext)), 0)
-		  (dropped + priorDrop) / (dropped + notDropped + priorDrop + priorNodrop)
-	    case FIXDROP(p) =>
-		  if (isConsonant(rContext))
-		    if (isConsonant(lContext))
-		    	0.62
-		    else
-		    	0.23
-		  else
-		    if (isVowel(rContext))
-		      if (isConsonant(lContext))
-		    	0.42
-		      else
-		        0.15
-		    else
-		      if (isPause(rContext))
-		        if (isConsonant(lContext))
-		        	0.36
-		        else
-		          0.07
-		      else
-		        throw new Error("Unknown Segment "+SymbolSegTable(rContext))	      
+	/**
+	 * build the StartPos --> (Underlying, Surface) HashMap from scratch
+	 */
+	def buildWords = {
+	  words.clear
+	  var startPos = 0
+	  var curPos = 1
+	  while (curPos<data.length) {
+	    if (boundaries(curPos)) {
+	      words(startPos)=getWord(startPos, curPos)
+	      startPos=curPos
+	    }
+	    curPos+=1
 	  }
-
-	}//dropProb	//TODO - word-specific probabilities  */
+	  words(startPos)=getWord(startPos, curPos)
+	}
 	
-	def setBoundary(pos: Int, b: Boundary): Unit = 
-	  boundaries(pos)= b
-
-	def setRule(pos: Int, b: Rule): Unit = 
-	  rules(pos)= b	  
-	  
-	def delModelProb: Double = 
-	  if (wordseg.wordseg.dropInferenceMode==IGNOREDROP)
-		  0
-	  else { 
-		  delModeLType match {
-		  case GlobalFix =>
-		    wordseg.wordseg.dropInferenceMode match {
-		      case INFERDROP(priorDrop,priorNodrop) =>
-			  	Gamma.logGamma(nD1+priorDrop)+Gamma.logGamma(nNotD1+priorNodrop)-Gamma.logGamma(nD1+nNotD1+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)
-		      case FIXDROP(p) =>
-			  	nD1*math.log(p)+nNotD1*math.log(1-p)
-		    }
-		  case CVPFollows =>
-		    wordseg.wordseg.dropInferenceMode match {
-		      case INFERDROP(priorDrop,priorNodrop) =>
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Consonant),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleRContext(Consonant),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Consonant),0)+realized1.getOrElse(SimpleRContext(Consonant),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+	        
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Vowel),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleRContext(Vowel),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Vowel),0)+realized1.getOrElse(SimpleRContext(Vowel),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Pause),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleRContext(Pause),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleRContext(Pause),0)+realized1.getOrElse(SimpleRContext(Pause),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)
-			  case FIXDROP(p) =>
-			  	deleted1.getOrElse(SimpleRContext(Consonant),0)*math.log(0.37)+realized1.getOrElse(SimpleRContext(Consonant),0)*math.log(1-0.37)+
-			  	deleted1.getOrElse(SimpleRContext(Vowel),0)*math.log(0.22) + realized1.getOrElse(SimpleRContext(Vowel),0)*math.log(1-0.22)+
-			  	deleted1.getOrElse(SimpleRContext(Pause),0)*math.log(0.14)+realized1.getOrElse(SimpleRContext(Pause),0)*math.log(1-0.14)
-		    }
-		  case CVPLeftRight =>
-		    wordseg.wordseg.dropInferenceMode match {
-		      case INFERDROP(priorDrop,priorNodrop) =>
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+realized1.getOrElse(SimpleLRContext(Consonant,Consonant),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+	        
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+realized1.getOrElse(SimpleLRContext(Consonant,Vowel),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Consonant,Pause),0)+realized1.getOrElse(SimpleLRContext(Consonant,Pause),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+realized1.getOrElse(SimpleLRContext(Vowel,Consonant),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+	        
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+realized1.getOrElse(SimpleLRContext(Vowel,Vowel),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)+
-			  	Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorDrop)+Gamma.logGamma(realized1.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorNodrop)-Gamma.logGamma(deleted1.getOrElse(SimpleLRContext(Vowel,Pause),0)+realized1.getOrElse(SimpleLRContext(Vowel,Pause),0)+priorDrop+priorNodrop)+
-			  	Gamma.logGamma(priorDrop+priorNodrop)-Gamma.logGamma(priorDrop)-Gamma.logGamma(priorNodrop)
-		     case FIXDROP(_) =>
-		        deleted1.getOrElse(SimpleLRContext(Consonant,Consonant),0)*math.log(0.62)+realized1.getOrElse(SimpleLRContext(Consonant,Consonant),0)*math.log(1-0.62)+     
-			  	deleted1.getOrElse(SimpleLRContext(Consonant,Vowel),0)*math.log(0.42)+realized1.getOrElse(SimpleLRContext(Consonant,Vowel),0)*math.log(1-0.42)+
-			  	deleted1.getOrElse(SimpleLRContext(Consonant,Pause),0)*math.log(0.36)+realized1.getOrElse(SimpleLRContext(Consonant,Pause),0)*math.log(1-0.36)+
-			  	deleted1.getOrElse(SimpleLRContext(Vowel,Consonant),0)*math.log(0.23)+realized1.getOrElse(SimpleLRContext(Vowel,Consonant),0)*math.log(1-0.23)+
-			  	deleted1.getOrElse(SimpleLRContext(Vowel,Vowel),0)*math.log(0.15)+realized1.getOrElse(SimpleLRContext(Vowel,Vowel),0)*math.log(1-0.15)+
-			  	deleted1.getOrElse(SimpleLRContext(Vowel,Pause),0)*math.log(0.07)+realized1.getOrElse(SimpleLRContext(Vowel,Pause),0)*math.log(1-0.07)
-			  
-		    }
+	def getUnderlyingWordAt(sPos: Int) = words(sPos)._1
+	
+	// get the neighbour at position nPos; if nPos is uboundary, neighbour is boundaryword
+	def getUnderlyingNeighbourAt(nPos: Int) = if (uboundaries(nPos)) UBOUNDARYWORD else words(nPos)._1
+	
+	/**
+	 * return the context of that boundary at assume that the words
+	 * have been removed and will be reinserted
+	 */
+	def removeBoundary(bPos: Int): AContext = {
+	  val w1Pos = boundaryToLeft(bPos-1)
+	  val leftPos = if (uboundaries(w1Pos)) w1Pos else boundaryToLeft(w1Pos-1)
+	  val leftU = getUnderlyingNeighbourAt(leftPos)
+	  val w2Pos = bPos
+	  val (w1U,w1O,w1D1,w1D2) = getWordWithVar(w1Pos, w2Pos)
+	  if (uboundaries(w2Pos)) { //final context
+		  del1s-=bPos
+		  del2s-=bPos	    
+		  FinalContext(leftU,w1U,w1O,w1D1,w1D2,w1Pos)
+	  } else {
+		  val w2End = boundaryToRight(bPos+1)
+		  val (w1U,w1O,w1D1,w1D2) = getWordWithVar(w1Pos, w2Pos)
+		  val (w2U,w2O) = getWord(w2Pos,w2End)
+		  val (w12U,w12O) = getWord(w1Pos,w2End)
+		  val rU = getUnderlyingNeighbourAt(w2End)
+		  words.remove(w1Pos)
+		  if (boundaries(w2Pos)) {
+		    words.remove(w2Pos)
+		  }
+		  boundaries-=bPos
+		  del1s-=bPos
+		  del2s-=bPos
+		  MedialContext(leftU,w1U,w1O,w1D1,w1D2,w2U,w2O,w12U,w12O,rU,w1Pos)  
 	  }
-	} 
+	}
+	
+	def insertWord(startPos: Int,wUO: (WordType,WordType)) = {
+	  words(startPos)=wUO
+	  val bPos = startPos+wUO._2.length
+	  boundaries+=(bPos)
+	  if (wUO._1.finalSeg==DROPSEG1)
+	    del1s+=bPos
+	  else if (wUO._1.finalSeg==DROPSEG2)
+	    del2s+=bPos
+	}
+	
+	def delModelProb: Double = delModel1.loglikelihood() 
 
 	
 	/**
@@ -453,115 +313,92 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	    assert(u==s)
 	    1.0
 	  } else {
-	  val res = u.lastSeg match {
-	  case DROPSEG1 =>
-	    val rContext = rWord(rWord.length-1)
-	    if (u==s)
-	      (1-dropProb(u,rContext))
-	    else
-	      if (u.allButLast==s)
-	        dropProb(u,rContext)
-	      else
-	        0.0
-	  case _ =>
-	    if (u==s)
-	      1.0
-	    else
-	      0.0
-	  }
+	    val res = u.lastSeg match {
+	      case DROPSEG1 =>
+	          if (u==s)
+	            (1-delModel1.prob(features(u,rWord)))
+	         else if (u.allButLast==s)
+	            delModel1.prob(features(u,rWord))
+	         else
+	            0.0
+	      case DROPSEG2 =>
+	        if (u==s)
+	          (1-delModel2.prob(features(u,rWord)))
+	        else if (u.allButLast==s)
+	          delModel2.prob(features(u,rWord))
+	        else
+	          0.0
+	      case _ =>
+	        if (u==s)
+	        	1.0
+	        else
+	        	0.0
+	    }
 	  res
 	  }
 	}
 	
 	
 	
-	
-	def _findBoundary(op: Int=>Int)(cPos: Int): Int = boundaries(cPos) match {
-    	case WBoundary | UBoundary => cPos
-    	case NoBoundary =>  _findBoundary(op)(op(cPos))
-	}
+	/**
+	 * find the boundary
+	 */
+	def _findBoundary(op: Int=>Int)(cPos: Int): Int = { //println(cPos)
+	  if (boundaries(cPos))  cPos
+	  else _findBoundary(op)(op(cPos))}
+
    
 
 	def boundaryToLeft: (Int=>Int) = _findBoundary(_-1)
 	def boundaryToRight: (Int=>Int) = _findBoundary(_+1)
 	
-	def boundaryToRightSentence(x: (Int,Int)): (Int=>Int) = _findBoundary(_+1+x._1)
-
-	def getWordWithVarSentence(sPos: Int, ePos: Int,s: (Int,Int)): (WordType,WordType,WordType) = {
-	  val offset = s._1+1
-	  getWordWithVar(offset+sPos,offset+ePos)
-	}
-
+	/**
+	 * returns (underlying,observed)
+	 */
+	def getWord(sPos: Int, ePos: Int): (WordType, WordType) = 
+		((new WordType(data, sPos, ePos, { if (del1s(ePos))
+	    		 							  DROPSEG1
+	    		 							else if (del2s(ePos))
+	    		 							  DROPSEG2
+	    		 							else
+	    		 							  -1}),		 
+	      new WordType(data, sPos, ePos, -1))
+		)													    
+	
 	
 	/**
-	 * returns a triple (observed,underlying,withDrop)
+	 * returns a 4-tuple (underlying,observed,withDrop1,withDrop2)
 	 */
-	def getWordWithVar(sPos: Int, ePos: Int): (WordType,WordType,WordType) = {
-	  val word = new WordType(data,sPos, ePos,-1)
-	  val wD = new WordType(data,sPos,ePos,DROPSEG1)
-	  rules(ePos) match {
-	    case Del1 =>
-	      (word,wD,wD)
-	    case _ =>
-	      (word,word,wD)
-	  }
-	}
-	
-	
-	def getWordSentence(sPos: Int, ePos: Int,s: (Int,Int)): (WordType,WordType) = {
-	  val offset = s._1+1
-	  getWord(offset+sPos,offset+ePos)
+	def getWordWithVar(sPos: Int, ePos: Int): (WordType,WordType,WordType,WordType) = {
+	  val (wordU: WordType,wordO: WordType) = getWord(sPos, ePos)
+	  val wD1 = new WordType(data,sPos,ePos,DROPSEG1)
+	  val wD2 = new WordType(data,sPos,ePos,DROPSEG2)
+	  (wordU,wordO,wD1,wD2)
 	}
 	  
-	
-	/**
-	 * returns a tuple (observed,underlying)
-	 * 
-	 * this may save the additional cost of creating a copy of the token with an additional dropsegment
-	 */
-	def getWord(sPos: Int, ePos: Int): (WordType,WordType) = {
-	  val word = new WordType(data,sPos, ePos,-1)
-	  rules(ePos) match {
-	    case Del1 =>
-	      (word,new WordType(data,sPos,ePos,DROPSEG1))
-	    case _ =>
-	      (word,word)
-	  }
-	}
+
 
 
 	def getAnalysis(segSep: String, wordSeg: String): String = {
 	  def inner(sPos: Int,cPos: Int,res: StringBuilder): String = 
 	    if (cPos>=boundaries.size)
 	      res.toString
-	    else 
+	    else  
 	      boundaries(cPos) match {
-	      	case NoBoundary => inner(sPos,cPos+1,res)
-	      	case WBoundary =>
-	      	  rules(cPos) match {
-	      	    case NoRule | Rel1 | Rel2 =>
-	      	      res.append(wToS(new WordType(data,sPos-1,cPos,-1),segSep)+wordSeg)
+	      	case false => inner(sPos,cPos+1,res)
+	      	case true =>
+	      	  val sep = if (uboundaries(cPos)) "\n" else wordSeg
+	      	  if (del1s(cPos)) {
+	      	      res.append(wToS(new WordType(data,sPos-1,cPos,DROPSEG1),segSep)+sep)
 	      	      inner(cPos+1,cPos+1,res)
-	      	    case Del1 =>
-	      	      res.append(wToS(new WordType(data,sPos-1,cPos,DROPSEG1),segSep)+wordSeg)
+	      	  } else if (del2s(cPos)) {
+	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG2),segSep)+sep)
+	      	      inner(cPos+1,cPos+1,res)	      	    
+	      	  } else {
+	      	      res.append(wToS(new WordType(data,sPos-1,cPos,-1),segSep)+sep)
 	      	      inner(cPos+1,cPos+1,res)
-	      	    case Del2 =>
-	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG2),segSep)+"\n")
-	      	      inner(cPos+1,cPos+1,res)	      	      
 	      	  }
-	      	case UBoundary =>
-	      	  rules(cPos) match {
-	      	    case NoRule | Rel1 | Rel2 =>
-	      	      res.append(wToS(new WordType(data,sPos-1, cPos,-1),segSep)+"\n")
-	      	      inner(cPos+1,cPos+1,res)
-	      	    case Del1 =>
-	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG1),segSep)+"\n")
-	      	      inner(cPos+1,cPos+1,res)	      	      
-	      	    case Del2 =>
-	      	      res.append(wToS(new WordType(data,sPos-1, cPos,DROPSEG2),segSep)+"\n")
-	      	      inner(cPos+1,cPos+1,res)	      	      
-	      	  }
-	    }
+	      }
 	  inner(1,1,new StringBuilder)
 	}
 	
@@ -578,27 +415,17 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	      Unit
 	    else  {
 	      boundaries(cPos) match { 
-	      	case NoBoundary => 
+	      	case false => 
 	      	  out.print("0")
-	      	case WBoundary => 
-	      	  rules(cPos) match {
-	      	    case Del1 =>
-	      	      out.print(DROP1)
-	      	    case Del2 =>
-	      	      out.print(DROP2)
-	      	    case NoRule | Rel1 | Rel2 =>
-	      	      out.print("1")
-	      	  }
-	    
-	      	case UBoundary => 
-	      	  rules(cPos) match {
-	      	    case Del1 =>
-	      	      out.print(DROP1)
-	      	    case Del2 =>
-	      	      out.print(DROP2)
-	      	    case NoRule | Rel1 | Rel2 =>
-	      	      out.print("1")
-	      	  }
+	      	case true =>
+	      	  if (del1s(cPos))
+	      	    out.print("t")
+	      	  else if (del2s(cPos))
+	      	    out.print("d")
+	      	  else
+	      	    out.print("1")
+	      	  if (uboundaries(cPos))
+	      	    out.print("\n")
 	      }
 	      inner(cPos+1)
 	    }
@@ -617,22 +444,17 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		var correctDrops = 0;
 		var trueStartPos=0
 		var predStartPos=0		
-		for (i <- 1 to boundaries.length-1) {
-		  rules(i) match {
-		    case Del1 =>
-		      totalDrops+=1
-		    case _ =>
-		  }
-		  goldRules(i) match {
-		    case Del1 =>
-		      trueDrops+=1
-		    case _ =>
-		  }
-		  correctDrops += { if (goldRules(i)==rules(i) && rules(i)==Del1) 1 else 0}
-		  boundaries(i) match {
-		    case NoBoundary => {
-		      goldBoundaries(i) match {
-		        case WBoundary =>
+		for (i <- 1 to nBoundaries) {
+		  if (del1s(i))
+  	        totalDrops+=1
+		  if (golddel1s(i))
+  	        trueDrops+=1
+
+		  correctDrops += { if ((golddel1s(i)==del1s(i) && golddel1s(i))) 1 else 0}
+		  (boundaries(i),uboundaries(i)) match {
+		    case (false,_) => {
+		      goldboundaries(i) match {
+		        case true =>
 		          trueBoundaries+=1
 		          trueTokens+=1
 		          trueStartPos=i
@@ -640,11 +462,11 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		        case _ =>
 		      }
 		    }
-		    case WBoundary => {
+		    case (true,false) => {
 		      totalBoundaries+=1
 		      totalTokens+=1
-		      goldBoundaries(i) match {
-		        case WBoundary => {
+		      goldboundaries(i) match {
+		        case true => {
 		          trueBoundaries+=1
 		          correctBoundaries+=1
 		          trueTokens+=1
@@ -655,7 +477,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		      }
 		      predStartPos=i
 		    }
-		    case UBoundary => {
+		    case (true,true) => {
 		      totalTokens+=1
 		      trueTokens+=1
 		      if (predStartPos==trueStartPos) correctTokens+=1		      
@@ -669,7 +491,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		           correctDrops.toFloat/totalDrops,correctDrops.toFloat/trueDrops,0,0)
 	}
 	
-	def showDropProbs: String = delModeLType match {
+/*	def showDropProbs: String = delModeLType match {
 	  case GlobalFix =>
 	    dropProb(null, 1).toString
 	  case CVPFollows => ""
@@ -683,5 +505,5 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	    " V_V "+dropProbContext(isVowel.example,isVowel.example) +
 	    " V_P "+dropProbContext(isVowel.example,isPause.example)*/	    
 	}
-	
+	*/
 }

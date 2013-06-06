@@ -33,31 +33,67 @@ object LogisticRegression {
     
     
     /**
-     * a Gaussian prior, this is the loglikelihood, not the negative log-likelihood
+     * a Gaussian prior with unit-variance, this is the loglikelihood up to proportionality, not the negative log-likelihood
      */
     def l2prior(w: DenseVector[Double]): Double = {
       -(w map (math.pow(_,2))).sum
+    }
+    
+    def l2derivative(w: DenseVector[Double]): DenseVector[Double] = {
+      w
+    }
+    
+    /**
+     * a laplace prior with unit-variance, this is the loglikelihood up to proportionality 
+     */
+    def l1prior(w: DenseVector[Double]): Double = {
+      -(w map (_.abs)).sum
+    }
+    
+    /**
+     * subgradient for w(i)==0 --> random number between [-1;1]
+     */
+    def l1derivative(w: DenseVector[Double]): DenseVector[Double] = {
+      val res = breeze.linalg.DenseVector.fill(w.size)(0.0)
+      var i = 0
+      while (i<w.size) {
+        if (w(i)>0)
+          res(i) = -math.sqrt(2.0)
+        else if (w(i)<0)
+          res(i) = math.sqrt(2.0)
+        else if (w(i)==0) {
+          val pos = (nextDouble()>0.5)
+          if (pos)
+            nextDouble()
+          else
+            -nextDouble()
+        }
+        i+=1
+      }
+      res
     }
 }
 
 /**
  * binary logistic regression
  */
-class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Double],val logprior: DenseVector[Double]=>Double=LogisticRegression.l2prior)  {
+class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Double],val logprior: DenseVector[Double]=>Double=LogisticRegression.l2prior, val priorderiv: DenseVector[Double]=>DenseVector[Double]=LogisticRegression.l2derivative)  {
   
   def sigmoid(x: Double) = 1/(1+math.exp(-x))
   def sigmoidprime(x: Double) = sigmoid(x)*(1-sigmoid(x))
   
   var weights: DenseVector[Double] = DenseVector.fill(nfeatures)(0.0)
-  
   var inputs: DenseMatrix[Double] = null	// N x |w| data matrix
   var inputstranspose: DenseMatrix[Double] = null //|w| x N data matrix
   var outputs: DenseVector[Double] = null // Nx1 output vector
   
+  
+  var hasData: Boolean = false
   /*
    * featurize the inputs
    */
   def setInputs(in: Array[Input]) = {
+    hasData = true
     inputs = LogisticRegression.turnIntoMatrix(in map (features(_)))
     inputstranspose=inputs.t
   }
@@ -67,6 +103,12 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     outputs = DenseVector(out)
   }
   
+  /**
+   * calculates the probability of the input vector coming out as positive
+   */
+  def prob(in: Array[Double],w: DenseVector[Double] = weights) = {
+    sigmoid(w dot new DenseVector[Double](in))
+  }
  
   
   /**
@@ -79,10 +121,25 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
   
   
   /**
-   * see HelmsHold2006
+   * see HelmsHold2006, A2
    */
-  def helmsHoldGibbs(start: DenseVector[Double]=weights) = {
-	  
+  def helmsHoldGibbs(start: DenseVector[Double]=weights,nu: DenseMatrix[Double],nIters: Int) = {
+    val n = inputs.rows
+	val Lambda = breeze.linalg.diag(breeze.linalg.DenseVector.fill(n)(1.0))
+	val Z = breeze.linalg.DenseVector.fill(n)(0.0)
+	def initZ = {
+      var i=0
+      while (i<n) {
+        val (a,b) = if (outputs(i)==1) (0.0,Double.PositiveInfinity) else (Double.NegativeInfinity,0.0)
+        Z(i) = npbayes.distributions.truncatedNormalVariate(0, 1, a, b)
+      }
+    }
+    initZ
+    var iteration = 0
+    while (iteration<nIters) {
+      val V = inputstranspose*Lambda.t
+      iteration+=1
+    }
   }
   
   /**
@@ -160,7 +217,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
         val nll = -loglikelihood(x)
         val mu_y = (inputs * x).map(sigmoid(_)) - outputs
         val res = inputstranspose*mu_y
-        (nll,res+x) //l2-regularizer, make generic for differentiable priors
+        (nll,res+priorderiv(x))
       }    
     
   }
@@ -216,13 +273,17 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
   def loglikelihood(w: DenseVector[Double]=weights): Double = {
     var res: Double = 0
     var i = 0
-    while (i<inputs.rows) {
-      val xi = inputstranspose(::,i)
-      val mu = w dot xi
-      res = res + outputs(i)*mu - math.log(1+math.exp(mu))
-      i+=1
+    if (!hasData)
+      0
+    else {
+	    while (i<inputs.rows) {
+	      val xi = inputstranspose(::,i)
+	      val mu = w dot xi
+	      res = res + outputs(i)*mu - math.log(1+math.exp(mu))
+	      i+=1
+	    }
+	    res + logprior(w)
     }
-    res + logprior(w)
   }
   
 }

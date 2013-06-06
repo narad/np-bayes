@@ -41,6 +41,9 @@ object SymbolSegTable {
     mappingSegToString.get(x)
 }
 
+/**
+ * Maps Integers to Phoneme Classes (e.g. Cons, Vwl, Pause, ...)
+ */
 object SymbolClassTable {
   val mappingStringToSeg = HashBiMap.create[String,SegmentType]()
   def mappingSegToString = mappingStringToSeg.inverse

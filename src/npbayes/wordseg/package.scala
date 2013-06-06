@@ -103,6 +103,7 @@ class WordType(private val array:Array[Int],private val start:Int, private val e
     else
       new WordType(array,start,end)
   }
+  
   override def toString = {
     val buf = new StringBuilder
     var i = start

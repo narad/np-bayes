@@ -7,8 +7,6 @@ import npbayes.wordseg.models.Bigram
 import npbayes.wordseg.models.WordsegModel
 import npbayes.ArgParser
 import npbayes.distributions.{EXACT,MAXPATH,MINPATH}
-import npbayes.wordseg.data.GlobalFix
-import npbayes.wordseg.data.CVPFollows
 import npbayes.distributions.PosteriorPredictive
 import npbayes.wordseg.data.Identifier
 import npbayes.wordseg.lexgens.MonkeyUnigram
@@ -123,16 +121,7 @@ object wordseg {
 	  PhonemeClassMap.init(options.PHONMAP)
 	}
 	binitProb = options.BOUNDINITPROB
-	  val contextModel = options.CONTEXTMODEL match {
-	    case "no" =>
-	      GlobalFix
-	    case "right" =>
-	      CVPFollows
-	    case "leftright" =>
-	      CVPLeftRight
-	    case _ =>
-	      throw new Error(options.CONTEXTMODEL+" is invalid value for --context: either no or right or leftright")
-	  }
+	
 	  
 	  dropInferenceMode = options.DROPPROB match {
 	    case 0.0 => IGNOREDROP
@@ -170,9 +159,9 @@ object wordseg {
 	  
 	  val model: WordsegModel = options.NGRAM match {
 	    case "1" =>
-	      new Unigram(options.INPUT,options.ALPHA0,0,options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,contextModel,lexgen)
+	      new Unigram(options.INPUT,options.ALPHA0,0,options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)
 	    case "2" =>
-	      new Bigram(options.INPUT,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,contextModel,lexgen)	      
+	      new Bigram(options.INPUT,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)	      
 	  }
 	  
 	  def annealTemperature(x: Int) = 	    //npbayes.wordseg.annealTemperature(x)
@@ -193,14 +182,14 @@ object wordseg {
 	  
 	  println(0+" "+1+" "+model.logProb+" "+model._logProbTrack+" "+model.evaluate +   	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
-	    	else
-	    	  " " + model.data.showDropProbs} +
-	    	  " " + model.hyperParam)
+	    	else " "}
+//	    	  " " + model.data.showDropProbs} +
+	    	  + " " + model.hyperParam)
 	  traceFile.println(0+" "+1+" "+model.logProb+" "+model._logProbTrack+" "+model.evaluate +   	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
 	    	else
-	    	  " " + model.data.showDropProbs} +
-	    	  " " + model.hyperParam)
+	    	  " "} // + model.data.showDropProbs} +
+	    	  + " " + model.hyperParam)
 	    	  
 	  for (i <- 1 to options.ITERS) {
 	    val temperature: Double = annealTemperature(i)
@@ -216,7 +205,7 @@ object wordseg {
 	    	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
 	    	else
-	    	  " " + model.data.showDropProbs} +
+	    	  " "} + //model.data.showDropProbs} +
 	    	  " " + model.hyperParam
 	    println(log); traceFile.println(log)
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {

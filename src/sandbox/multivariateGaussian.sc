@@ -5,6 +5,20 @@ import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 
 object multivariateGaussian {
+
+  def toArray(in: DenseMatrix[Double]): Array[Array[Double]] = {
+    val res = Array.ofDim[Double](in.rows, in.cols)
+    var i = 0
+    while (i<in.rows) {
+      var j = 0
+      while (j<in.cols) {
+        res(i)(j) = in(i,j)
+        j+=1
+      }
+      i+=1
+    }
+    res
+  }                                               //> toArray: (in: breeze.linalg.DenseMatrix[Double])Array[Array[Double]]
  def featuresPN(x: String): Array[Double] = {
     val parsed = x.split(" ")
     val temp = Array.fill[Double](5)(0.0)
@@ -123,7 +137,7 @@ object multivariateGaussian {
     						case _ => 0.0
     				}
     temp
-  }                                               //> threefeatures: (x: String)Array[Double]
+	  }                                       //> threefeatures: (x: String)Array[Double]
   
     val s = scala.io.Source.fromFile("/home/bborschi/research/np-bayes/untracked/big.csv")
                                                   //> s  : scala.io.BufferedSource = non-empty iterator
@@ -147,66 +161,43 @@ object multivariateGaussian {
                                                   //| stop 967, dhaet no ae Vwl vowel P
                                                   //| Output exceeds cutoff limit.
   
-  val l = new maxent.LogisticRegression[String](5,featuresPN)
+  val l = new maxent.LogisticRegression[String](3,threefeatures,maxent.LogisticRegression.l2prior,maxent.LogisticRegression.l2derivative)
                                                   //> l  : npbayes.maxent.LogisticRegression[String] = npbayes.maxent.LogisticReg
-                                                  //| ression@1969a85c
+                                                  //| ression@14cbd69
   l.setInputs(X)
   l.setOutputs(Y)
-  def toArray(in: DenseMatrix[Double]): Array[Array[Double]] = {
-    val res = Array.ofDim[Double](in.rows, in.cols)
-    var i = 0
-    while (i<in.rows) {
-      var j = 0
-      while (j<in.cols) {
-        res(i)(j) = in(i,j)
-        j+=1
-      }
-      i+=1
-    }
-    res
-  }                                               //> toArray: (in: breeze.linalg.DenseMatrix[Double])Array[Array[Double]]
-  val zeros = l.weights                           //> zeros  : breeze.linalg.DenseVector[Double] = DenseVector(0.0, 0.0, 0.0, 0.0
-                                                  //| , 0.0)
-  val H_inv0 = breeze.linalg.inv(l.hessianAt(zeros))
-                                                  //> H_inv0  : breeze.linalg.DenseMatrix[Double] = 1.0011255387084785   1.001198
-                                                  //| 1123050275   -1.0007576403981002  ... (5 total)
-                                                  //| 1.0011981123050278   1.0017388219492103   -1.0009497919784136
-                                                  //| Output exceeds cutoff limit.
-//  l.mapLBFGS()
-  l.mapGradientDescent(threshold=0.0,maxIters=1000)
-                                                  //> # loglikelihood after 77 iterations: -21061.127870620196 (deltaLL: 0.0)
-  val map = l.weights                             //> map  : breeze.linalg.DenseVector[Double] = DenseVector(-1.429370761724099, 
-                                                  //| 0.2333794589799168, -0.42551262711898746, 0.24319191452452507, -1.013670590
-                                                  //| 1498666)
+  val zeros = l.weights                           //> zeros  : breeze.linalg.DenseVector[Double] = DenseVector(0.0, 0.0, 0.0)
+//  val H_inv0 = breeze.linalg.inv(l.hessianAt(zeros))
+  l.mapLBFGS()
+//  l.mapGradientDescent(threshold=0.0,maxIters=1000)
+  val map = l.weights                             //> map  : breeze.linalg.DenseVector[Double] = DenseVector(-1.2862729789490261,
+                                                  //|  -0.5438148343219444, -1.8430377965350306)
+ //map  : breeze.linalg.DenseVector[Double] = DenseVector(-1.2884896207284036,
   
-  
-  println(l.loglikelihood())                      //> -21061.127870620196
-  val H_inv = breeze.linalg.inv(l.hessianAt(map)) //> H_inv  : breeze.linalg.DenseMatrix[Double] = 1.0022055434709956   1.0020184
-                                                  //| 399526184   -1.0014843998295566  ... (5 total)
-                                                  //| 1.0020184399526182   1.0024225224701113   -1.0015460349862673 
+  println(l.loglikelihood())                      //> -23507.965961716196
+  val H_inv = breeze.linalg.inv(l.hessianAt(map)) //> H_inv  : breeze.linalg.DenseMatrix[Double] = 5.692415690290101E-4    -1.056
+                                                  //| 0219053688055E-7  -6.685926372950707E-7   
+                                                  //| -1.0560219053688054E-7  1.8573205041679913E-4   -2.180647223206276
                                                   //| Output exceeds cutoff limit.
-  val gaussianBad =
-  new org.apache.commons.math3.distribution.MultivariateNormalDistribution(zeros.data,toArray(H_inv0))
-                                                  //> gaussianBad  : org.apache.commons.math3.distribution.MultivariateNormalDist
-                                                  //| ribution = org.apache.commons.math3.distribution.MultivariateNormalDistribu
-                                                  //| tion@32f692ea
+/*  val gaussianBad =
+  new org.apache.commons.math3.distribution.MultivariateNormalDistribution(zeros.data,toArray(H_inv0))*/
   val gaussian =
-  new org.apache.commons.math3.distribution.MultivariateNormalDistribution(map.data,toArray(H_inv))
+  new org.apache.commons.math3.distribution.MultivariateNormalDistribution(map.data,toArray(H_inv*(math.pow(2.38, 2)/map.data.length)))
                                                   //> gaussian  : org.apache.commons.math3.distribution.MultivariateNormalDistrib
                                                   //| ution = org.apache.commons.math3.distribution.MultivariateNormalDistributio
-                                                  //| n@4db9705c
+                                                  //| n@3a22d561
 
-  def propb(x: Array[Double]): Array[Double] = {
+/*  def propb(x: Array[Double]): Array[Double] = {
   	val gaussianBad =
       new org.apache.commons.math3.distribution.MultivariateNormalDistribution(x,toArray(breeze.linalg.diag(breeze.linalg.DenseVector.fill(x.size)(1.0))))
   	gaussianBad.sample()
-  }                                               //> propb: (x: Array[Double])Array[Double]
+  }
   def proplpdfb(x: Array[Double],y: Array[Double]) = {
     val gaussianBad =
       new org.apache.commons.math3.distribution.MultivariateNormalDistribution(y,toArray(breeze.linalg.diag(breeze.linalg.DenseVector.fill(x.size)(1.0))))
   	gaussianBad.sample()
     math.log(gaussianBad.density(x))
-  }                                               //> proplpdfb: (x: Array[Double], y: Array[Double])Double
+  }*/
    
   def prop(x: Array[Double]): Array[Double] = gaussian.sample()
                                                   //> prop: (x: Array[Double])Array[Double]
@@ -221,21 +212,21 @@ object multivariateGaussian {
                                                   //> logpdf: (x: Array[Double])Double
   
   proplpdf(zeros.data,zeros.data)                 //> res0: Double = -1.7976931348623157E308
-  proplpdf(prop(null),zeros.data)                 //> res1: Double = 9.362753350130893
+  proplpdf(prop(null),zeros.data)                 //> res1: Double = 7.027794165627795
   
-  val posterior = new java.io.PrintStream(new java.io.File("/home/bborschi/research/np-bayes/untracked/acl_pn_murphyMH.txt"),"utf-8")
-                                                  //> posterior  : java.io.PrintStream = java.io.PrintStream@7c9209e8
-  val samples=optimizer.samplersMultivariate.mhsample(map.data, logpdf, proplpdf, prop, 100, 1000,10,true)
-                                                  //> rejrate: 0.61113864
-                                                  //| samples  : Array[Array[Double]] = Array(Array(-1.6720178229594629, -0.04601
-                                                  //| 6763231885915, -0.12462491764197442, 0.5164075228583676, -0.805709444386512
-                                                  //| 8), Arra
-                                                  //| Output exceeds cutoff limit.
+  val posterior = new java.io.PrintStream(new java.io.File("/home/bborschi/research/np-bayes/untracked/acl_3_l2priorMurphyMixMH.txt"),"utf-8")
+                                                  //> posterior  : java.io.PrintStream = java.io.PrintStream@4a5afb90
+  val samples=optimizer.samplersMultivariate.mhsample(map.data, logpdf, proplpdf, prop, 1000, 10000,10,true)
+                                                  //> rejrate: 0.38614333
+                                                  //| samples  : Array[Array[Double]] = Array(Array(-1.2955966276313207, -0.51449
+                                                  //| 94365988814, -1.902459064550803), Array(-1.3160089835440871, -0.52898036169
+                                                  //| 51495, -
+                                                  //| Output exceeds cutoff limit.-
   
   for (x<-samples) {
     for (i <- x)
       posterior.printf(i+" ")
-    posterior.printf("\n")
+    posterior.printf(l.loglikelihood(new DenseVector(x))+"\n")
   }
   posterior.close()
 

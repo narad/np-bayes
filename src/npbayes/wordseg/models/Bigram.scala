@@ -35,12 +35,12 @@ object Bigram {
 
 class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Double=0,var concentrationBi: Double, var discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
     		  val dropSeg: String = "KLRK", val dropInd: String = "KLRK",val dropProb: Double = 0.0,
-    		  val contextModel: DeletionModel, val lexgen: LexGenerator) extends WordsegModel {
+    		  val lexgen: LexGenerator) extends WordsegModel {
 	require(0<=discountUni && discountUni<1)
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	
 	val unif= new Random
-	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"","",contextModel)
+	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"","")
 	val pypUni = { 
 		val tlexgen = lexgen match {
 		  case BIUNLEARNED =>
@@ -59,10 +59,9 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 
 	
 	def boundaries = data.boundaries
-	def rules = data.rules
 	def nTokens = pypUni._oCount
 	
-	def evaluate =
+/*	def evaluate =
 	  data.evaluate.toString
 
 	def update(precedingW: WordType, word: WordType): Double = {
@@ -615,5 +614,5 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  	  resampleWords(i,anneal)
 	  }
 	  logProb
-	}
+	}*/
 }
