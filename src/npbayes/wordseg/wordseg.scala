@@ -79,6 +79,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def DROPPRIOR = getDouble("--dropPrior",1.0); params += (("dropPrior",DROPPRIOR))
 	def NODROPPRIOR = getDouble("-noDropPrior",1.0); params += (("noDropPrior",NODROPPRIOR))
 	def FEATURES = getString("--features","no"); params += (("features",FEATURES))
+	def LOGLEARN = getString("--loglearn","optimize"); params += (("loglearn",LOGLEARN))
 	def DELAYRECOVERY = getBoolean("--delayRecovery",true); params += (("delayRecovery",DELAYRECOVERY))  //if set to true, no recovery during annealing
 	def HYPERPARAM = getString("--hyper","no"); params += (("hyper",HYPERPARAM))
 	def SHAPE = getDouble("--shape",0.1); params += (("shape",SHAPE))
@@ -104,6 +105,7 @@ object wordseg {
     var hsampleiters: Int = 0
     var hsmhvar: Double = 0.1
     var binitProb: Double = 0.0
+    var loglearn: String = "optimize"
     var features = Data.featuresN
 	def main(args: Array[String]) {
 	  val options = new TaggerParams(args)
@@ -119,6 +121,7 @@ object wordseg {
 	    case _ =>
 	      throw new Error(options.ASSUMPTION+ " is invalid value for --asumption: either EXACT, MINPATH or MAXPATH")
 	  }
+	  loglearn = options.LOGLEARN
 	features = options.FEATURES match {
 	  case "no" => Data.featuresNo
 	  case "left" => Data.featuresN

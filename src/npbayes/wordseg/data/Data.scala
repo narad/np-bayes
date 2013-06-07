@@ -278,20 +278,19 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	
 	// get the neighbour at position nPos; if nPos is uboundary, neighbour is boundaryword
 	def getUnderlyingNeighbourAt(nPos: Int) = if (uboundaries(nPos)) UBOUNDARYWORD else words(nPos)._1
-	
-	/**
-	 * return the context of that boundary at assume that the words
-	 * have been removed and will be reinserted
-	 */
+
+	def getUnderlyingLeftNeighbourAt(nPos: Int,ePos: Int) = if (nPos==ePos) UBOUNDARYWORD else words(nPos)._1
+
 	def removeBoundary(bPos: Int): AContext = {
 	  val w1Pos = boundaryToLeft(bPos-1)
 	  val leftPos = if (uboundaries(w1Pos)) w1Pos else boundaryToLeft(w1Pos-1)
-	  val leftU = getUnderlyingNeighbourAt(leftPos)
+	  val leftU = getUnderlyingLeftNeighbourAt(leftPos,w1Pos)
 	  val w2Pos = bPos
 	  val (w1U,w1O,w1D1,w1D2) = getWordWithVar(w1Pos, w2Pos)
 	  if (uboundaries(w2Pos)) { //final context
 		  del1s-=bPos
 		  del2s-=bPos	    
+		  words.remove(w1Pos)
 		  FinalContext(leftU,w1U,w1O,w1D1,w1D2,w1Pos)
 	  } else {
 		  val w2End = boundaryToRight(bPos+1)
@@ -306,6 +305,28 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 		  boundaries-=bPos
 		  del1s-=bPos
 		  del2s-=bPos
+		  MedialContext(leftU,w1U,w1O,w1D1,w1D2,w2U,w2O,w12U,w12O,rU,w1Pos)  
+	  }
+	}
+	
+	/**
+	 * return the context of that boundary
+	 * don't make any changes to the data, though
+	 */
+	def getBoundaryContext(bPos: Int): AContext = {
+	  assert(boundaries(bPos))
+	  val w1Pos = boundaryToLeft(bPos-1)
+	  val leftPos = if (uboundaries(w1Pos)) w1Pos else boundaryToLeft(w1Pos-1)
+	  val leftU = getUnderlyingLeftNeighbourAt(leftPos,w1Pos)
+	  val w2Pos = bPos
+	  val (w1U,w1O,w1D1,w1D2) = getWordWithVar(w1Pos, w2Pos)
+	  if (uboundaries(w2Pos)) { //final context 
+		  FinalContext(leftU,w1U,w1O,w1D1,w1D2,w1Pos)
+	  } else {
+		  val w2End = boundaryToRight(bPos+1)
+		  val (w2U,w2O) = getWord(w2Pos,w2End)
+		  val (w12U,w12O) = getWord(w1Pos,w2End)
+		  val rU = getUnderlyingNeighbourAt(w2End)
 		  MedialContext(leftU,w1U,w1O,w1D1,w1D2,w2U,w2O,w12U,w12O,rU,w1Pos)  
 	  }
 	}

@@ -61,7 +61,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
 	
-	def evaluate =
+	override def evaluate =
 	  data.evaluate.toString
 
 	def update(precedingW: WordType, word: WordType): Double = {
@@ -85,7 +85,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  res
 	}
 	
-	def sanity: Boolean = {
+	override def sanity: Boolean = {
 	  val resIter = pypBis.values.iterator
 	  val res = 0.0
 	  while (resIter.hasNext) {
@@ -116,42 +116,39 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	def DROPSYMBOL = data.DROP1
 	def _phoneSeq = data.data
 	
-	
-/*
-	/**
-	 * initializes the CRP with the counts
-	 */
-	def init(goldBoundaries:Boolean = false, binitProb:Double = 0.5) = {
-	  def inner(sPos: Int,cPos: Int): Unit = 
-	    if (cPos>=boundaries.length)
+	override def init(gold:Boolean = false, binitProb:Double = 0.5) = { 
+	  def inner(bPos: Int): Unit = 
+	    if (bPos>=data.nBoundaries)
 	      Unit
 	    else 
-	      boundaries(cPos) match {
-	      	case NoBoundary => inner(sPos,cPos+1)
-	      	case WBoundary => {
-	      	  val context = medialContext(cPos)
- 	      	  _logProbTrack += math.log(update(context.leftU,context.w1U)*toSurface(context.w1U,context.w1O,context.rightU))
- 	      	  data.addTransformation(data.whichTransform(context.w1O,context.w1U), context.w1U, context.w2U)
- 	      	  inner(cPos+1,cPos+1)
-	      	}
-	      	case UBoundary => {
-	      	  val context = finalContext(cPos)
-	      	  _logProbTrack += math.log(update(context.leftU,context.wU)*toSurface(context.wU,context.wO,data.UBOUNDARYWORD))
-	      	  _logProbTrack += math.log(update(context.wU,data.UBOUNDARYWORD))
-	      	  data.addTransformation(data.whichTransform(context.wO,context.wU), context.wU, data.UBOUNDARYWORD)
-	      	  inner(cPos+1,cPos+1)
-	      	}
+	      boundaries(bPos) match {
+	      	case false => inner(bPos+1)
+	      	case true =>
+	      	  val context = data.getBoundaryContext(bPos)
+	      	  context match {
+	      	    case c: MedialContext =>
+	      	      update(c.leftU, c.w1U)
+	      	    case c: FinalContext =>
+	      	      update(c.leftU,c.w1U)
+	      	      update(c.w1U,data.UBOUNDARYWORD)
+	      	  }
+ 	      	  inner(bPos+1)	      	    
+	      }
+	  if (gold) {
+	    data.boundaries.clear
+	    data.boundaries++=data.goldboundaries
+	    data.buildWords
+	  } else {
+	    data.boundaries.clear()
+	    data.boundaries++=data.randomBoundaries(binitProb)
+	    data.buildWords
 	  }
-	  if (goldBoundaries) {
-	    data.boundaries=data.goldBoundaries.clone
-	    data.rules=data.goldRules.clone
-	    for (i <- 1 until data.rules.length) {
-	      if (data.rules(i)==Del1)
-	        data.rules(i)=NoRule
-	    }
-	  }
-	  inner(1,1)
+	  val res = inner(1)
+	  data.updateDel1Model
+	  if (wordseg.DEBUG)
+		  assert(pypUni.sanityCheck)
 	}	
+	
 	
 	
 	def predictive(word: WordType, w2: WordType): Double = {
@@ -208,99 +205,96 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	 * returns a distribution over all possible ways to resample
 	 * an utterance medial boundary position
 	 */
-	def _calcMedialHypotheses(context: BigramMedialContext): Categorical[(Boundary,Rule)] = {
+	def _calcMedialHypotheses(context: MedialContext): Categorical[(Boundary,Rule)] = {
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  res.add((NoBoundary,NoRule),
-	      _noBoundary(context.leftU,context.w1w2U,context.w1w2O,context.rightU))	 
-	  val tRule = data.whichTransform(context.w1O, context.w1U)
+	      _noBoundary(context.leftU,context.w12U,context.w12O,context.rightU))	 
 	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP && !wordseg.wordseg.isAnnealing)    
 		  res.add((WBoundary,Del1),
-		      _boundary(context.leftU,context.w1D,context.w2U,context.w1O,context.w2O,context.rightU))	    
-	  res.add((WBoundary,tRule),
+		      _boundary(context.leftU,context.w1D1,context.w2U,context.w1O,context.w2O,context.rightU))	    
+	  res.add((WBoundary,NoRule),
 	      _boundary(context.leftU,context.w1O,context.w2U,context.w1O,context.w2O,context.rightU))
 	  assert(res.partition>0)
 	  res
 	}
 	
-	def _calcFinalHypotheses(context: BigramFinalContext): Categorical[(Boundary,Rule)] = {
+	def _calcFinalHypotheses(context: FinalContext): Categorical[(Boundary,Rule)] = {
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP && !wordseg.wordseg.isAnnealing)
 		  res.add((UBoundary,Del1),
-		      _ubProb(context.leftU,context.wD,context.wO))
-	  val tRule = data.whichTransform(context.wO,context.wU)
-	  res.add((UBoundary,tRule),
-	      _ubProb(context.leftU,context.wO,context.wO))
+		      _ubProb(context.leftU,context.w1D1,context.w1O))
+	  res.add((UBoundary,NoRule),
+	      _ubProb(context.leftU,context.w1O,context.w1O))
 	  assert(res.partition>0)
 	  res
 	}
 	
-	def updateBoundary(pos: Int, br: (Boundary,Rule), context: BContext) = {
+	def updateBoundary(pos: Int, br: (Boundary,Rule), context: AContext) = {
   	  val (b,r) = br
-	  val hasChanged = boundaries(pos)!=b
-	  data.setBoundary(pos, b)
-	  data.setRule(pos,r)
+	  val boundary = boundaries(pos)
 	  context match {
-	    case BigramMedialContext(leftU,w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rightO,rightU) =>
+	    case c: MedialContext =>
 	      b match {
 	        case WBoundary =>
 	          r match {
 	            case Del1 =>
-		          _logProbTrack += math.log(update(leftU,w1D)*toSurface(w1D,w1O,w2U))
-		          data.addTransformation(r, w1D, w2U)		          
-		          _logProbTrack += math.log(update(w1D,w2U)*toSurface(w2U,w2O,rightU))
-		          _logProbTrack += math.log(update(w2U,rightU)) //*toSurface(rightU,rightO,null))
-	            case NoRule | Rel1 =>
-	              _logProbTrack += math.log(update(leftU,w1O)*toSurface(w1O,w1O,w2U))
-	              data.addTransformation(r, w1O, w2U)	              
-	              _logProbTrack += math.log(update(w1O,w2U)*toSurface(w2U,w2O,rightU))
-	              _logProbTrack += math.log(update(w2U,rightU)) //*toSurface(rightU,rightO,null))
+	              update(c.leftU,c.w1D1)
+	              data.insertWord(c.w1Start, (c.w1D1,c.w1O))
+	              update(c.w1D1,c.w2U)
+	              data.insertWord(pos,(c.w2U,c.w2O))
+	              update(c.w2U,c.rightU)
+	            case NoRule =>
+	              update(c.leftU,c.w1O)
+	              data.insertWord(c.w1Start, (c.w1O,c.w1O))
+	              update(c.w1O,c.w2U)
+	              data.insertWord(pos,(c.w2U,c.w2O))
+	              update(c.w2U,c.rightU)
 	          }  
 	        case NoBoundary =>
-	          _logProbTrack += math.log(update(leftU,w1w2U)*toSurface(w1w2U,w1w2O,rightU))
-	          _logProbTrack += math.log(update(w1w2U,rightU))//*toSurface(rightU,rightO,null))
+	          update(c.leftU,c.w12U)
+	          data.insertWord(c.w1Start, (c.w12U,c.w12O))
+	          update(c.w12U,c.rightU)
 	      }
-	    case BigramFinalContext(leftU,wO,wU,wD) =>
+	    case c: FinalContext =>
 	          r match {
 	            case Del1 =>
-	            	_logProbTrack += math.log(update(leftU,wD)*toSurface(wD,wO,data.UBOUNDARYWORD))
-	            	data.addTransformation(r,wD,data.UBOUNDARYWORD)	            	
-	            	_logProbTrack += math.log(update(wD,data.UBOUNDARYWORD))
-	            case Rel1 | NoRule =>
-	            	_logProbTrack += math.log(update(leftU,wO)*toSurface(wO,wO,data.UBOUNDARYWORD))
-	            	data.addTransformation(r,wO,data.UBOUNDARYWORD)
-	          		_logProbTrack += math.log(update(wO,data.UBOUNDARYWORD))	              
-	            
+	              update(c.leftU,c.w1D1)
+	              data.insertWord(c.w1Start, (c.w1D1,c.w1O))
+	              update(c.w1D1,data.UBOUNDARYWORD)
+	            case NoRule =>
+	              update(c.leftU,c.w1O)
+	              data.insertWord(c.w1Start, (c.w1O,c.w1O))
+	              update(c.w1O,data.UBOUNDARYWORD)	              
 	          }
 	  }
 	}
 	
-	def removeAssociatedObservations(context: BContext, boundary: Boundary, rule: Rule) = {context match {
-	  case BigramMedialContext(lU,w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rO,rU) =>
+	def removeAssociatedObservations(context: AContext, boundary: Boolean) = 
+	  context match {
+	  case c: MedialContext =>
 	    boundary match {
-	      case WBoundary =>
-	        data.removeTransformation(rule, w1U, w2U)
-	        _logProbTrack -= math.log(removeWrap(lU, w1U)*toSurface(w1U,w1O,w2U))
-	        _logProbTrack -= math.log(removeWrap(w1U,w2U)*toSurface(w2U,w2O,rU))
-	        _logProbTrack -= math.log(removeWrap(w2U,rU)) //*toSurface(rU,rO,null))
-	      case NoBoundary =>
-	        _logProbTrack -= math.log(removeWrap(lU,w1w2U)*toSurface(w1w2U,w1w2O,rU))
-	        _logProbTrack -= math.log(removeWrap(w1w2U,rU)) //*toSurface(rU,rO,null))
+	      case true =>
+	        removeWrap(c.leftU,c.w1U)
+	        removeWrap(c.w1U,c.w2U)
+	        removeWrap(c.w2U,c.rightU)
+	      case false =>
+	        removeWrap(c.leftU,c.w12U)
+	        removeWrap(c.w12U,c.rightU)
 	    }
-	  case BigramFinalContext(lU,wO,wU,wD) =>
-	  	data.removeTransformation(rule,wU, data.UBOUNDARYWORD)
-	    _logProbTrack -= math.log(removeWrap(lU,wU)*toSurface(wU,wO,data.UBOUNDARYWORD))
-	    _logProbTrack -= math.log(removeWrap(wU,data.UBOUNDARYWORD))
-	}
+	  case c: FinalContext =>
+	  	removeWrap(c.leftU,c.w1U)
+	  	removeWrap(c.w1U,data.UBOUNDARYWORD)
 	}
 	
-	def _calcHypotheses(context: BContext): Categorical[(Boundary,Rule)] = context match {
-	  case c: BigramMedialContext => _calcMedialHypotheses(c)
-	  case c: BigramFinalContext => _calcFinalHypotheses(c)
+	def _calcHypotheses(context: AContext): Categorical[(Boundary,Rule)] = context match {
+	  case c: MedialContext => _calcMedialHypotheses(c)
+	  case c: FinalContext => _calcFinalHypotheses(c)
 	}
 	
 	def resample(pos: Int, anneal: Double=1.0): Unit = {
-	  val context = boundaryContext(pos)
-	  removeAssociatedObservations(context, boundaries(pos),rules(pos))
+	  val boundary = data.boundaries(pos)
+	  val context = data.removeBoundary(pos)
+	  removeAssociatedObservations(context, boundary)
 	  val result = _calcHypotheses(context)
 	  val (newBound,newRule) = {
 		  if (anneal==1.0)
@@ -311,7 +305,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  updateBoundary(pos, (newBound,newRule),context)
 	}
 	
-	def resampleConcentration(hsiters: Int = 1) = {
+	override def resampleConcentration(hsiters: Int = 1) = {
 	
 	  //MH helpers
 	  def proposallogpdf(x: Double,y: Double): Double = {
@@ -414,7 +408,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	}	  
 	
 
-	def optimizeConcentration = {
+	override def optimizeConcentration = {
       val tmpOptim = new BrentOptimizer(0.00001,0.000001)
       
       	
@@ -474,7 +468,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 
 	
 
-	def hyperParam: String = {
+	override def hyperParam: String = {
 	  var res = "alpha0 "+pypUni.concentration
       res += " alpha1 "+concentrationBi
 	  res
@@ -502,7 +496,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  lp1 + lp2 + lp3 + lp4+data.delModelProb
 	}
 	
-	def logProb: Double = { 
+	override def logProb: Double = { 
 	  val lp1 = pypUni.base.logProb
 	  val lp2 = pypUni.logProbSeating
 	  var lp3 = 0.0
@@ -525,9 +519,9 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  }
 	}
 	
-	def gibbsSweep(anneal: Double=1.0): Double = {
-//	  for (i: Int <- shuffle(1 until boundaries.length)) {
-	  for (i: Int <- 1 until boundaries.length) {	    
+	override def gibbsSweep(anneal: Double=1.0): Double = {
+//	  for (i: Int <- shuffle(1 until data.nBoundaries)) {
+	  for (i: Int <- 1 until data.nBoundaries) {	    
 		  resample(i,anneal)
 	  }
 	  logProb
@@ -538,18 +532,18 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	 */
 	def resampleWords(pos: Int, anneal: Double) = {
 	  boundaries(pos) match {
-	    case NoBoundary => Unit
-	    case _ =>
-	    val context = boundaryContext(pos)
-	    removeAssociatedObservations(context, boundaries(pos),rules(pos))
+	    case false => Unit
+	    case true =>
+	    	val context = data.removeBoundary(pos)
+	    	removeAssociatedObservations(context,true) 
 	    context match {
-	    	case BigramMedialContext(leftU,w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rightO,rightU) =>
-	    	  val res = __reseatProbs(leftU, w1D, w1O, w2U, w2O, rightU)
+	    	case c: MedialContext =>
+	    	  val res = __reseatProbs(c.leftU, c.w1D1, c.w1O, c.w2U, c.w2O, c.rightU)
 	    	  updateBoundary(pos, res.sample(anneal), context)
-	    	case BigramFinalContext(leftU,wO,wU,wD) => 
-	    	  val res = __reseatProbs(leftU,wD,wO)
+	    	case c: FinalContext => 
+	    	  val res = __reseatProbs(c.leftU,c.w1D1,c.w1O)
 	    	  updateBoundary(pos,res.sample(anneal), context)
-	  }	      
+	    }	      
 	  }
 
 	}
@@ -558,8 +552,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  val res = new Categorical[(Boundary,Rule)]
 	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP)
 		  res.add((UBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
-	  val tRule = data.whichTransform(w1O,w1O)
-	  res.add((UBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
+	  res.add((UBoundary,NoRule), predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
 	  res
 	}
 	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType, w2U: WordType, w2O: WordType, rightU: WordType): Categorical[(Boundary,Rule)] = {
@@ -567,8 +560,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP)
 	    res.add((WBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
-      val tRule = data.whichTransform(w1O, w1O)			  				 
-	  res.add((WBoundary,tRule), predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O,w2U)*
+	  res.add((WBoundary,NoRule), predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
 	  res
 	}
@@ -576,11 +568,16 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	/**
 	 * only resample words, but determine drops
 	 */
-	def gibbsSweepWords(anneal: Double=1.0): Double = {
-//   for (i: Int <- shuffle(1 until boundaries.length)) {
-	  for (i: Int <- 1 until boundaries.length) {
+	override def gibbsSweepWords(anneal: Double=1.0): Double = {
+//   for (i: Int <- shuffle(1 until data.nBoundaries)) {
+	  for (i: Int <- 1 until data.nBoundaries) {
 	  	  resampleWords(i,anneal)
 	  }
+	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP) wordseg.wordseg.loglearn match {
+	    case "optimize" => data.updateDel1Model 
+	    case "sample" => data.updateDel1ModelSample
+	    case _ => throw new Error("--loglearn has to be either 'optimize' or 'sample'")
+	  }
 	  logProb
-	}*/
+	}
 }
