@@ -42,12 +42,12 @@ case class UnigramFinalContext(val wO: WordType, val wU: WordType, val wD: WordT
 }					  
 					  
 
-class Unigram(val corpusName: String,concentration: Double,discount: Double=0,val pWB: Double = 0.5, val assumption: HEURISTIC = EXACT,val dropSeg: String = "KLRK", val dropInd: String = "KLRK", val dropProb: Double =0.0,
+class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>Array[Double]),concentration: Double,discount: Double=0,val pWB: Double = 0.5, val assumption: HEURISTIC = EXACT,val dropSeg: String = "KLRK", val dropInd: String = "KLRK", val dropProb: Double =0.0,
     val lexgen: LexGenerator) extends WordsegModel {
 	require(0<=discount && discount<1)
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0 
-	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"0","0",Data.featuresPN)
+	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"0","0",features)
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
 	//val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	val pypUni = {
@@ -135,7 +135,7 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	    data.buildWords
 	  }
 	  val res = inner(0)
-//	  data.updateDel1Model //don't initialize...
+	  data.updateDel1Model
 	  if (wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
 	}	
@@ -385,10 +385,10 @@ class Unigram(val corpusName: String,concentration: Double,discount: Double=0,va
 	
 	override def gibbsSweepWords(anneal: Double=1.0): Double = {
 //	  println("deletionpoints: "+data.del1s+" words: "+data.words)
-	  for (i: Int <- 1 to data.uboundaries.last) {
+	  for (i: Int <- shuffle(1 to data.uboundaries.last)) {
 		  resampleWords(i,anneal)
 	  }
-	  data.updateDel1Model
+	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP) data.updateDel1ModelSample
 	  logProb
 	}
 	

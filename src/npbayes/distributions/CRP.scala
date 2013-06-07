@@ -15,6 +15,7 @@ abstract class HEURISTIC
 case object EXACT extends HEURISTIC
 case object MINPATH extends HEURISTIC
 case object MAXPATH extends HEURISTIC
+case object MAXPROB extends HEURISTIC
 
 /**
  * this follows closely Sharons's/Mark's implementation
@@ -262,6 +263,41 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
 	    _tCount+=1
 	    concentration*mProb/(_oCount-1+concentration)
 	  }
+     case MAXPROB =>
+      val oldT = _oCount(obs)-discount*_tCount(obs)
+      val newT = (concentration+discount*_tCount)*base(obs)
+      _oCount+=1      
+      if (oldT>newT) {
+    	val maxCust = labelTabels.get(obs).nCust_nTables.lastKey()
+    	val newNTables = labelTabels.get(obs).nCust_nTables.get(maxCust)-1
+	    assert(maxCust>0)
+	    if (newNTables>0) {
+	    	labelTabels.get(obs).nCust_nTables.put(maxCust, newNTables)
+	    } else {
+	      labelTabels.get(obs).nCust_nTables.remove(maxCust)
+	    }
+    	val tmp = labelTabels.get(obs).nCust_nTables.get(maxCust+1)
+    	if (tmp==null) {
+    	  labelTabels.get(obs).nCust_nTables.put(maxCust+1, 1)
+    	} else {
+    	  labelTabels.get(obs).nCust_nTables.put(maxCust+1, tmp+1)
+    	}
+	    maxCust/(_oCount-1+concentration)        
+      } else {
+       val res = _pSitAtNew(obs)
+       base.update(obs)
+       val tmp = labelTabels.get(obs)
+       if (tmp==null) {
+         val tmp2 = new TypeCount
+         tmp2.sitAtNew
+         labelTabels.put(obs,tmp2)
+       } else {
+         tmp.sitAtNew
+       }
+       _tCount += 1
+       _oCount += 1
+       res        
+      }
      case MINPATH => 
        if (_oCount(obs)==0) {
          val tmp = labelTabels.get(obs)
@@ -310,8 +346,8 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
    */
   def remove (obs: T) = {
     val counts = labelTabels.get(obs)
+    val r = if (assumption==MAXPROB) 0 else (_random.nextDouble*counts.nCust).toInt
     _oCount-=1
-    val r = (_random.nextDouble*counts.nCust).toInt
 //    val remCusts = labelTabels(obs).remove(r)
     val remCusts = counts.remove(r)
     if (remCusts==0) {

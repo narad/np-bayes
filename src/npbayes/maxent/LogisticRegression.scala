@@ -14,6 +14,23 @@ trait FeatureVector[T] {
 
 object LogisticRegression {
     
+  /**
+   * Turn a Matrix into an Array of the form that apache uses
+   */
+    def toArray(in: DenseMatrix[Double]): Array[Array[Double]] = {
+      val res = Array.ofDim[Double](in.rows, in.cols)
+      var i = 0
+      while (i<in.rows) {
+        var j = 0
+	      while (j<in.cols) {
+	        res(i)(j) = in(i,j)
+	        j+=1
+      	  }
+      	  i+=1
+    	}
+      res
+    }  
+  
     /**
      * turn an Array of Arrays into a Breeze Matrix
      */
@@ -119,6 +136,20 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     weights = lbfgs.minimize(gradient, start)
   }
   
+  def mhUpdate(burnIn:Int=100) = {
+    mapLBFGS()
+    val H_inv = breeze.linalg.inv(hessianAt(weights))
+    val gaussian =
+      new org.apache.commons.math3.distribution.MultivariateNormalDistribution(weights.data,LogisticRegression.toArray(H_inv*(math.pow(2.38, 2)/weights.data.length)))
+    def prop(x: Array[Double]): Array[Double] = gaussian.sample()
+    def proplpdf(x: Array[Double],y: Array[Double]) = {
+    	val res = math.log(gaussian.density(x))
+    	res
+    }
+
+    def logpdf(x: Array[Double]) = loglikelihood(new DenseVector(x))
+    weights = new DenseVector(optimizer.samplersMultivariate.mhsample(weights.data, logpdf, proplpdf, prop, burnIn, 1,1,true)(0))
+  }
   
   /**
    * see HelmsHold2006, A2

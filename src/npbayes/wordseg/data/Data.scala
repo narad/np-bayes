@@ -62,6 +62,12 @@ case class FinalContext(leftU: WordType, w1U: WordType, w1O: WordType, w1D1: Wor
 
 object Data {
    
+  val featuresNo = (1, {
+    val res = Array.fill[Double](1)(1.0) 
+    def x(w1w2: (WordType,WordType)): Array[Double] = res
+    x(_)
+  })
+  
   /**
     * coarse previous-next feature set 
     * (prevVwl, prevCons, nextVwl, nextCons, nextPaus)
@@ -218,20 +224,36 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	 * for the logistic regression model
 	 */
 	def updateDel1Model = {
-	  println("being update")
 	  val relWords = words.filter(x => x._2._1.lastSeg==DROPSEG1 && x._2._1.length>1)
-	  println("Size relWords: "+relWords.size)
+//	  println("Size relWords: "+relWords.size)
 	  val inputs =  relWords.toList.map(f => ((f._2._1,
 	  							  	   getUnderlyingNeighbourAt(f._1+f._2._2.length)))).toArray
-      println("built inputs (size="+inputs.length+")")
+//      println("built inputs (size="+inputs.length+")")
 	  if (inputs.length!=0) {
 		  val outputs = relWords.map(f => (if (f._2._1!=f._2._2) 1.0 else 0.0)).toArray
-		  println("built outputs (size="+outputs.size+")")
+//		  println("built outputs (size="+outputs.size+")")
 	      delModel1.setInputs(inputs)
 	      delModel1.setOutputs(outputs)
-		  println("optimize")
+//		  println("optimize")
 		  delModel1.mapLBFGS()
-		  println("end update ("+delModel1.weights+")")	      
+//		  println("end update ("+delModel1.weights+")")	      
+	  }
+	}
+	
+	def updateDel1ModelSample = {
+	  val relWords = words.filter(x => x._2._1.lastSeg==DROPSEG1 && x._2._1.length>1)
+//	  println("Size relWords: "+relWords.size)
+	  val inputs =  relWords.toList.map(f => ((f._2._1,
+	  							  	   getUnderlyingNeighbourAt(f._1+f._2._2.length)))).toArray
+//      println("built inputs (size="+inputs.length+")")
+	  if (inputs.length!=0) {
+		  val outputs = relWords.map(f => (if (f._2._1!=f._2._2) 1.0 else 0.0)).toArray
+//		  println("built outputs (size="+outputs.size+")")
+	      delModel1.setInputs(inputs)
+	      delModel1.setOutputs(outputs)
+//		  println("optimize")
+		  delModel1.mhUpdate()
+//		  println("end update ("+delModel1.weights+")")	      
 	  }
 	}
 	

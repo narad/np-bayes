@@ -19,6 +19,8 @@ import npbayes.wordseg.lexgens.BigramLearned
 import scala.collection.mutable.LinkedList
 import scala.collection.mutable.ListBuffer
 import java.io.PrintStream
+import npbayes.distributions.MAXPROB
+import npbayes.maxent.LogisticRegression
 
 abstract class LexGenerator
 case object UNIUNLEARNED extends LexGenerator
@@ -76,13 +78,13 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def BOUNDINITPROB = getDouble("--binitProb",0.0); params += (("binitProb",BOUNDINITPROB))
 	def DROPPRIOR = getDouble("--dropPrior",1.0); params += (("dropPrior",DROPPRIOR))
 	def NODROPPRIOR = getDouble("-noDropPrior",1.0); params += (("noDropPrior",NODROPPRIOR))
-	def CONTEXTMODEL = getString("--context","no"); params += (("context",CONTEXTMODEL))
+	def FEATURES = getString("--features","no"); params += (("features",FEATURES))
 	def DELAYRECOVERY = getBoolean("--delayRecovery",true); params += (("delayRecovery",DELAYRECOVERY))  //if set to true, no recovery during annealing
 	def HYPERPARAM = getString("--hyper","no"); params += (("hyper",HYPERPARAM))
 	def SHAPE = getDouble("--shape",0.1); params += (("shape",SHAPE))
 	def RATE = getDouble("--rate",0.1); params += (("rate",RATE))
 	def HSAMPLE = getString("--hsampler","slice"); params += (("hsampler",HSAMPLE))
-	def HSAMPLEITERS = getInt("--hsampleiters",1); params += (("hsampleiters",HSAMPLEITERS))
+	def HSAMPLEITERS = getInt("--hsampleiters",10); params += (("hsampleiters",HSAMPLEITERS))
 	def HSMHSSD = getDouble("--hsmhsd",0.1); params += (("hsmhsd",HSMHSSD))
 	def HSLOWITERS = getInt("--hslowiters",0); params += (("hslowiters",HSLOWITERS))
 }
@@ -102,6 +104,7 @@ object wordseg {
     var hsampleiters: Int = 0
     var hsmhvar: Double = 0.1
     var binitProb: Double = 0.0
+    var features = Data.featuresN
 	def main(args: Array[String]) {
 	  val options = new TaggerParams(args)
 	  val assumption = options.ASSUMPTION match {
@@ -111,9 +114,16 @@ object wordseg {
 	      MINPATH
 	    case "MAXPATH" =>
 	      MAXPATH
+	    case "MAXPROB"=>
+	      MAXPROB
 	    case _ =>
 	      throw new Error(options.ASSUMPTION+ " is invalid value for --asumption: either EXACT, MINPATH or MAXPATH")
 	  }
+	features = options.FEATURES match {
+	  case "no" => Data.featuresNo
+	  case "left" => Data.featuresN
+	  case "leftright" => Data.featuresPN
+	}
 	hsampleiters = options.HSAMPLEITERS
 	hsample = options.HSAMPLE
 	hsmhvar = options.HSMHSSD
@@ -159,7 +169,7 @@ object wordseg {
 	  
 	  val model: WordsegModel = options.NGRAM match {
 	    case "1" =>
-	      new Unigram(options.INPUT,options.ALPHA0,0,options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)
+	      new Unigram(options.INPUT,features,options.ALPHA0,0,options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)
 	    case "2" =>
 	      new Bigram(options.INPUT,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)	      
 	  }
@@ -195,7 +205,7 @@ object wordseg {
 	    val temperature: Double = annealTemperature(i)
 	    isAnnealing = temperature!=1.0
 	    sample(1/temperature)
-	    hyperparam match {
+	    if (i>4) hyperparam match {
 	      case "no" =>
 	      case "sample" => model.resampleConcentration({if (i<options.HSLOWITERS) 1 else options.HSAMPLEITERS})
 	      case "optimize" => model.optimizeConcentration
@@ -205,7 +215,7 @@ object wordseg {
 	    	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
 	    	else
-	    	  " "} + //model.data.showDropProbs} +
+	    	  " "} + model.data.delModel1.weights +
 	    	  " " + model.hyperParam
 	    println(log); traceFile.println(log)
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {

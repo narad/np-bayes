@@ -61,7 +61,7 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	def boundaries = data.boundaries
 	def nTokens = pypUni._oCount
 	
-/*	def evaluate =
+	def evaluate =
 	  data.evaluate.toString
 
 	def update(precedingW: WordType, word: WordType): Double = {
@@ -112,44 +112,12 @@ class Bigram(val corpusName: String,var concentrationUni: Double,discountUni: Do
 	  } else
 		  data.R(u,o,rU)
 	}
+	
 	def DROPSYMBOL = data.DROP1
 	def _phoneSeq = data.data
 	
 	
-	
-	def medialContext(pos: Int): BigramMedialContext = {
-	  assert(pos>0 && boundaries(pos)!=UBoundary && pos<(boundaries.length-1))
-	  val leftWordStart = data.boundaryToLeft(pos-1)
-	  val rightWordEnd = data.boundaryToRight(pos+1) 
-	  val (w1O,w1U,w1D) = data.getWordWithVar(leftWordStart, pos)
-	  val (w2O,w2U) = data.getWord(pos,rightWordEnd)
-	  val (w1w2O,w1w2U) = data.getWord(leftWordStart, rightWordEnd)
-	  val lU = boundaries(leftWordStart) match {
-	    case UBoundary => data.UBOUNDARYWORD
-	    case _ => data.getWord(data.boundaryToLeft(leftWordStart-1), leftWordStart)._2
-	  }
-	  val (rO,rU) = boundaries(rightWordEnd) match {
-	    case UBoundary => (data.UBOUNDARYWORD,data.UBOUNDARYWORD)
-	    case _ => data.getWord(rightWordEnd, data.boundaryToRight(rightWordEnd+1))
-	  }
-	  new BigramMedialContext(lU,w1O,w1U,w1D,w2O,w2U,w1w2O,w1w2U,rO,rU)
-	}
-	
-	def finalContext(pos: Int): BigramFinalContext = {
-	  assert(pos>0 && boundaries(pos)==UBoundary)
-	  val leftWordStart = data.boundaryToLeft(pos-1)
-	  val (wO,wU,wD) = data.getWordWithVar(leftWordStart, pos)
-	  val lU = boundaries(leftWordStart) match {
-	    case UBoundary => data.UBOUNDARYWORD
-	    case _ => data.getWord(data.boundaryToLeft(leftWordStart-1), leftWordStart)._2
-	  }
-	  new BigramFinalContext(lU,wO,wU,wD)
-	}
-	
-	def boundaryContext(pos: Int): BContext = boundaries(pos) match {
-	  case UBoundary => finalContext(pos)
-	  case _ => medialContext(pos)
-	}	
+/*
 	/**
 	 * initializes the CRP with the counts
 	 */
