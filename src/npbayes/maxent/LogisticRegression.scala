@@ -137,10 +137,12 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
   }
   
   def mhUpdate(burnIn:Int=100) = {
-    mapLBFGS()
+    mapLBFGS()//GradientDescent(maxIters=10000,threshold= -0.5)
+    val g = gradient.gradientAt(weights)
+    val H = hessianAt(weights)
     val H_inv = breeze.linalg.inv(hessianAt(weights))
     val gaussian =
-      new org.apache.commons.math3.distribution.MultivariateNormalDistribution(weights.data,LogisticRegression.toArray(H_inv*(math.pow(2.38, 2)/weights.data.length)))
+      new org.apache.commons.math3.distribution.MultivariateNormalDistribution(weights.data,LogisticRegression.toArray(H_inv))//*(math.pow(2.38, 2)/weights.data.length)))
     def prop(x: Array[Double]): Array[Double] = gaussian.sample()
     def proplpdf(x: Array[Double],y: Array[Double]) = {
     	val res = math.log(gaussian.density(x))

@@ -126,6 +126,9 @@ object wordseg {
 	  case "no" => Data.featuresNo
 	  case "left" => Data.featuresN
 	  case "leftright" => Data.featuresPN
+	  case "leftrightident" => Data.featuresPNIdent
+	  case "interaction" => Data.featuresInteraction
+	  case "bigset" => Data.featuresPNInteraction
 	}
 	hsampleiters = options.HSAMPLEITERS
 	hsample = options.HSAMPLE
@@ -174,7 +177,7 @@ object wordseg {
 	    case "1" =>
 	      new Unigram(options.INPUT,features,options.ALPHA0,0,options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)
 	    case "2" =>
-	      new Bigram(options.INPUT,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)	      
+	      new Bigram(options.INPUT,features,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)	      
 	  }
 	  
 	  def annealTemperature(x: Int) = 	    //npbayes.wordseg.annealTemperature(x)
