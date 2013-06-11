@@ -50,21 +50,27 @@ object LogisticRegression {
     
     
     /**
-     * a Gaussian prior with unit-variance, this is the loglikelihood up to proportionality, not the negative log-likelihood
+     * a Gaussian prior with 0 mean, this is the loglikelihood
      */
-    def l2prior(w: DenseVector[Double]): Double = {
-      -(w map (math.pow(_,2))).sum
-    }
-    
-    def l2derivative(w: DenseVector[Double]): DenseVector[Double] = {
-      w
+    def l2prior(w: DenseVector[Double],variance: Double = 1.0): Double = {
+      val norm = -math.log((2*math.Pi*math.pow(variance,w.size)))
+      norm - (w map (math.pow(_,2)/(2*variance))).sum
     }
     
     /**
-     * a laplace prior with unit-variance, this is the loglikelihood up to proportionality 
+     * this is the derivative of the log-likelihood of the Gaussian prior
      */
-    def l1prior(w: DenseVector[Double]): Double = {
-      -(w map (_.abs)).sum
+    def l2derivative(w: DenseVector[Double],variance: Double=1.0): DenseVector[Double] = {
+      - w / variance
+    }
+    
+    /**
+     * a laplace prior with 0 mean, this is the loglikelihood 
+     * we put independent laplace-priors on each individual weight!!
+     */
+    def l1prior(w: DenseVector[Double],scale: Double=1.0): Double = {
+      val norm = -math.log(2*scale)*w.size
+      norm - (w map (_.abs/scale)).sum
     }
     
     /**
@@ -94,7 +100,7 @@ object LogisticRegression {
 /**
  * binary logistic regression
  */
-class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Double],val logprior: DenseVector[Double]=>Double=LogisticRegression.l2prior, val priorderiv: DenseVector[Double]=>DenseVector[Double]=LogisticRegression.l2derivative)  {
+class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Double],val logprior: (DenseVector[Double],Double)=>Double=LogisticRegression.l2prior, val priorderiv: (DenseVector[Double],Double)=>DenseVector[Double]=LogisticRegression.l2derivative)  {
   
   def sigmoid(x: Double) = 1/(1+math.exp(-x))
   def sigmoidprime(x: Double) = sigmoid(x)*(1-sigmoid(x))
@@ -137,12 +143,24 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
   }
   
   def mhUpdate(burnIn:Int=100) = {
-    mapLBFGS()//GradientDescent(maxIters=10000,threshold= -0.5)
+	  mapLBFGS()//GradientDescent(m
+//    mapGradientDescent()
+
+/** debugging
+    val posterior = new java.io.PrintStream(new java.io.File("logl.test"),"utf-8")
+    var w: Double = -5.1
+    while (w <= -4.9) {
+      val t = DenseVector.fill(1)(w)
+      posterior.println(w+" "+loglikelihood(t)+ " " + gradient.gradientAt(t).data(0))
+      w += 0.001
+    }
+*/
+//    mapNewtonsMethod()
     val g = gradient.gradientAt(weights)
     val H = hessianAt(weights)
     val H_inv = breeze.linalg.inv(hessianAt(weights))
     val gaussian =
-      new org.apache.commons.math3.distribution.MultivariateNormalDistribution(weights.data,LogisticRegression.toArray(H_inv))//*(math.pow(2.38, 2)/weights.data.length)))
+      new org.apache.commons.math3.distribution.MultivariateNormalDistribution(weights.data,LogisticRegression.toArray(H_inv*(math.pow(2.38, 2)/weights.data.length)))
     def prop(x: Array[Double]): Array[Double] = gaussian.sample()
     def proplpdf(x: Array[Double],y: Array[Double]) = {
     	val res = math.log(gaussian.density(x))
@@ -185,28 +203,25 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     var iters = 0
     var stepSize = pstepSize
     var deltaLL = (oldL-newL).abs
-    //println("# loglikelihood at start: "+oldL)
+    var g = gradient.gradientAt(weights)    
     while (deltaLL>threshold && iters<maxIters) {
-      val g = gradient.gradientAt(weights)
       val H = hessianAt(weights)
       val H_inv = breeze.linalg.inv(hessianAt(weights))
       val d = H_inv*g
-      val newW = weights - d*stepSize
+      val newW = weights - d *stepSize
       newL = loglikelihood(newW)
       deltaLL = (newL-oldL).abs
       if (newL<oldL) {
         stepSize = stepSize / 2.0
-        //println("half step-size (now "+stepSize+")")
       } else {
         stepSize = 1.2 * stepSize
-    	//println("increase step-size (now "+stepSize+")")
         weights = newW        
         oldL = newL
+        g = gradient.gradientAt(weights)
+        g = g / g.norm(2.0)
       }
-//      println(oldL+" "+weights)
       iters+=1      
     }
-//    println("# loglikelihood after "+iters+" iterations: "+oldL+" (deltaLL "+deltaLL+")")    
   }
   
   /**
@@ -219,25 +234,22 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     var stepSize = pstepSize
     var iters = 0
     var deltaLL = (oldL-newL).abs
-//    println("# loglikelihood at start: "+oldL)
-    while (deltaLL>threshold && iters<maxIters) {
-      val g = gradient.gradientAt(weights)
+    var g = gradient.gradientAt(weights)
+    while (deltaLL>threshold && iters<maxIters) {      
       g./=(g.norm(2.0)) //normalize
       val newW = weights - g*stepSize
       newL = loglikelihood(newW)
       deltaLL = (newL-oldL).abs      
       if (newL<oldL) {
         stepSize = stepSize / 2.0
-        //println("half step-size (now "+stepSize+")")
       } else {
         stepSize = 1.2 * stepSize
-    	//println("increase step-size (now "+stepSize+")")
         weights = newW
         oldL = newL
+        g = gradient.gradientAt(weights)
       }
       iters+=1
     }
-    println("# loglikelihood after "+iters+" iterations: "+oldL+" (deltaLL: "+deltaLL+")")
   }
   
   /**
@@ -250,11 +262,19 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
         val nll = -loglikelihood(x)
         val mu_y = (inputs * x).map(sigmoid(_)) - outputs
         val res = inputstranspose*mu_y
-        (nll,res+priorderiv(x))
+        (nll,res+priorderiv(x,1.0))
       }    
-    
   }
 
+  def unregGradient =
+    new DiffFunction[DenseVector[Double]] {
+      def calculate(x: DenseVector[Double]) = {
+        val nll = -loglikelihood(x)
+        val mu_y = (inputs * x).map(sigmoid(_)) - outputs
+        val res = inputstranspose*mu_y
+        (nll+logprior(weights,1.0),res)
+      }
+  }
   
   /**
    * Builds the Hessian for the NEGATIVE log-likelihood
@@ -285,7 +305,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
       i+=1
     }
     // with l2-regularizer
-    H + breeze.linalg.Matrix.ones[Double](dim,dim)
+    H + breeze.linalg.DenseMatrix.eye[Double](dim)
   }
   
   /**
@@ -315,7 +335,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
 	      res = res + outputs(i)*mu - math.log(1+math.exp(mu))
 	      i+=1
 	    }
-	    res + logprior(w)
+	    res + logprior(w,1.0)
     }
   }
   

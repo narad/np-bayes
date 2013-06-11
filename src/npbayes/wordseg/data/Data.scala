@@ -67,12 +67,7 @@ object Data {
     def x(w1w2: (WordType,WordType)): Array[Double] = res
     x(_)
   })
-  
-  val featuresPredictable = (1, {
-    val res = Array.fill[Double](1)(1.0) 
-    def x(w1w2: (WordType,WordType)): Array[Double] = res
-    x(_)
-  })  
+   
   
   val featuresPNInteraction = (11, {def x(w1w2: (WordType,WordType)): Array[Double] = {
 	    val (w1,w2) = w1w2
@@ -233,15 +228,15 @@ object Data {
 	    val res = Array.fill[Double](3)(0.0)
 	    val w2first = PhonemeClassMap.getClass(w2(0))
 	    res(0) = SymbolClassTable(w2first) match {
-	  					  case "Vwl" => 1.0
+	  					  case "VOWL" => 1.0
 	  					  case _ => 0.0
 	    		 }    
 	    res(1) = SymbolClassTable(w2first) match {
-	  					  case "Cons" => 1.0
+	  					  case "CONS" => 1.0
 	  					  case _ => 0.0
 	    		 }        
 	    res(2) = SymbolClassTable(w2first) match {
-	  					  case "Pause" => 1.0
+	  					  case "SIL" => 1.0
 	  					  case _ => 0.0
 	    		 }        
 	    res
@@ -261,7 +256,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	
 	//logistic regressions
 	val (nFeatures,features) = nAndFeatures
-	val delModel1 = new LogisticRegression[(WordType,WordType)](nFeatures,features)
+	val delModel1 = new LogisticRegression[(WordType,WordType)](nFeatures,features,logprior=LogisticRegression.l1prior)
 	val delModel2 = new LogisticRegression[(WordType,WordType)](nFeatures,features)
 	
 	//data-structures
@@ -357,6 +352,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	      delModel1.setOutputs(outputs)
 //		  println("optimize")
 		  delModel1.mapLBFGS()
+//	      delModel1.mapNewtonsMethod()
 //		  println("end update ("+delModel1.weights+")")	      
 	  }
 	}

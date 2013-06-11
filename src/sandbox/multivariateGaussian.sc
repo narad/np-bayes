@@ -5,7 +5,6 @@ import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 
 object multivariateGaussian {
-
   def toArray(in: DenseMatrix[Double]): Array[Array[Double]] = {
     val res = Array.ofDim[Double](in.rows, in.cols)
     var i = 0
@@ -19,9 +18,9 @@ object multivariateGaussian {
     }
     res
   }                                               //> toArray: (in: breeze.linalg.DenseMatrix[Double])Array[Array[Double]]
- def featuresPN(x: String): Array[Double] = {
+ def featuresPNInter(x: String): Array[Double] = {
     val parsed = x.split(" ")
-    val temp = Array.fill[Double](5)(0.0)
+    val temp = Array.fill[Double](11)(0.0)
     
     temp(0) = parsed(3) match {
     					  case "Cons" => 0.0
@@ -46,8 +45,33 @@ object multivariateGaussian {
     					  case "Vwl" => 0.0
     					  case "Pause" => 1.0
     				}
+    temp(5) = (parsed(3),parsed(6)) match {
+    					  case ("Cons","Cons") => 1.0
+    					  case _ => 0.0
+    }
+		temp(6) = (parsed(3),parsed(6)) match {
+    					  case ("Cons","Vwl") => 1.0
+    					  case _ => 0.0
+    }
+		temp(7) = (parsed(3),parsed(6)) match {
+    					  case ("Cons","Pause") => 1.0
+    					  case _ => 0.0
+    }
+    temp(8) = (parsed(3),parsed(6)) match {
+    					  case ("Vwl","Cons") => 1.0
+    					  case _ => 0.0
+    }
+		temp(9) = (parsed(3),parsed(6)) match {
+    					  case ("Vwl","Vwl") => 1.0
+    					  case _ => 0.0
+    }
+		temp(10) = (parsed(3),parsed(6)) match {
+    					  case ("Vwl","Pause") => 1.0
+    					  case _ => 0.0
+    }
+    
     temp
-  }                                               //> featuresPN: (x: String)Array[Double]
+  }                                               //> featuresPNInter: (x: String)Array[Double]
   def features(x: String): Array[Double] = {
     val parsed = x.split(" ")
     val temp = Array.fill[Double](13)(0.0)
@@ -154,30 +178,45 @@ object multivariateGaussian {
   }
   val Y = toyObs.toArray                          //> Y  : Array[Double] = Array(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0
                                                   //| , 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-                                                  //| , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1
+                                                  //| , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0
+                                                  //| , 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0
+                                                  //| , 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
                                                   //| Output exceeds cutoff limit.
   val X = toyIn.toArray                           //> X  : Array[String] = Array(wehst yes s Cons fricative s Cons fricative 22, 
                                                   //| ahsowshiyeyt no ey Vwl vowel Pau Pause Pause 8, aet no ae Vwl vowel d Cons 
-                                                  //| stop 967, dhaet no ae Vwl vowel P
+                                                  //| stop 967, dhaet no ae Vwl vowel Pau Pause Pause 4909, sowrt yes r Cons appr
+                                                  //| oximant ah Vwl vowel 38, ahbawt no aw Vwl vowel ey Vwl vowel 964, dihfahrah
+                                                  //| nt no n Cons nasal Pau Pause Pause 210, dihfahrahnt no n Cons nasal f C
                                                   //| Output exceeds cutoff limit.
   
-  val l = new maxent.LogisticRegression[String](3,threefeatures,maxent.LogisticRegression.l2prior,maxent.LogisticRegression.l2derivative)
+  val l = new maxent.LogisticRegression[String](11,featuresPNInter,maxent.LogisticRegression.l1prior,maxent.LogisticRegression.l2derivative)
                                                   //> l  : npbayes.maxent.LogisticRegression[String] = npbayes.maxent.LogisticReg
-                                                  //| ression@14cbd69
+                                                  //| ression@22967f8e
   l.setInputs(X)
   l.setOutputs(Y)
-  val zeros = l.weights                           //> zeros  : breeze.linalg.DenseVector[Double] = DenseVector(0.0, 0.0, 0.0)
+  val zeros = l.weights                           //> zeros  : breeze.linalg.DenseVector[Double] = DenseVector(0.0, 0.0, 0.0, 0.0
+                                                  //| , 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+  val test = new breeze.optimize.OWLQN[DenseVector[Double]](1000,6,750.0,0.0)
+                                                  //> test  : breeze.optimize.OWLQN[breeze.linalg.DenseVector[Double]] = breeze.o
+                                                  //| ptimize.OWLQN@36c0ae96
 //  val H_inv0 = breeze.linalg.inv(l.hessianAt(zeros))
-  l.mapLBFGS()
+//  l.mapLBFGS()
 //  l.mapGradientDescent(threshold=0.0,maxIters=1000)
-  val map = l.weights                             //> map  : breeze.linalg.DenseVector[Double] = DenseVector(-1.2862729789490261,
-                                                  //|  -0.5438148343219444, -1.8430377965350306)
- //map  : breeze.linalg.DenseVector[Double] = DenseVector(-1.2884896207284036,
-  
-  println(l.loglikelihood())                      //> -23507.965961716196
-  val H_inv = breeze.linalg.inv(l.hessianAt(map)) //> H_inv  : breeze.linalg.DenseMatrix[Double] = 5.692415690290101E-4    -1.056
-                                                  //| 0219053688055E-7  -6.685926372950707E-7   
-                                                  //| -1.0560219053688054E-7  1.8573205041679913E-4   -2.180647223206276
+  val map = test.minimize(l.unregGradient,l.weights) //l.weights
+                                                  //> map  : breeze.linalg.DenseVector[Double] = DenseVector(-1.2912046317862718,
+                                                  //|  1.1215957230131146E-6, -0.06588514220625868, 0.05256410754686743, -0.26274
+                                                  //| 285138477943, 0.0861927090786544, 0.0, -1.909114627487227E-4, -0.0, -0.0234
+                                                  //| 97216601268387, -0.10159162923018716)
+ //map  : breeze.linalg.DenseVector[Double] = DenseVector(-1.2884896207284036, -28232.577811362447
+  println(l.loglikelihood(map))                   //> -21505.20172934103
+  val H_inv = breeze.linalg.inv(l.hessianAt(map)) //> H_inv  : breeze.linalg.DenseMatrix[Double] = 0.375118069808161     0.124940
+                                                  //| 15973556592   ... (11 total)
+                                                  //| 0.1249401597355634    0.3751931897864525    ...
+                                                  //| -0.1666509872267314   -0.16661719802039482  ...
+                                                  //| -0.1666666044912388   -0.16668176987823258  ...
+                                                  //| -0.16662417871788932  -0.1665676823014523   ...
+                                                  //| 0.0417056525341178    -0.20840751899680976  ...
+                                                  //| 0.0416477519035
                                                   //| Output exceeds cutoff limit.
 /*  val gaussianBad =
   new org.apache.commons.math3.distribution.MultivariateNormalDistribution(zeros.data,toArray(H_inv0))*/
@@ -185,7 +224,7 @@ object multivariateGaussian {
   new org.apache.commons.math3.distribution.MultivariateNormalDistribution(map.data,toArray(H_inv*(math.pow(2.38, 2)/map.data.length)))
                                                   //> gaussian  : org.apache.commons.math3.distribution.MultivariateNormalDistrib
                                                   //| ution = org.apache.commons.math3.distribution.MultivariateNormalDistributio
-                                                  //| n@3a22d561
+                                                  //| n@ca5412c
 
 /*  def propb(x: Array[Double]): Array[Double] = {
   	val gaussianBad =
@@ -212,17 +251,19 @@ object multivariateGaussian {
                                                   //> logpdf: (x: Array[Double])Double
   
   proplpdf(zeros.data,zeros.data)                 //> res0: Double = -1.7976931348623157E308
-  proplpdf(prop(null),zeros.data)                 //> res1: Double = 7.027794165627795
+  proplpdf(prop(null),zeros.data)                 //> res1: Double = 11.08148775059146
   
-  val posterior = new java.io.PrintStream(new java.io.File("/home/bborschi/research/np-bayes/untracked/acl_3_l2priorMurphyMixMH.txt"),"utf-8")
-                                                  //> posterior  : java.io.PrintStream = java.io.PrintStream@4a5afb90
-  val samples=optimizer.samplersMultivariate.mhsample(map.data, logpdf, proplpdf, prop, 1000, 10000,10,true)
-                                                  //> rejrate: 0.38614333
-                                                  //| samples  : Array[Array[Double]] = Array(Array(-1.2955966276313207, -0.51449
-                                                  //| 94365988814, -1.902459064550803), Array(-1.3160089835440871, -0.52898036169
-                                                  //| 51495, -
-                                                  //| Output exceeds cutoff limit.-
-  
+  val posterior = new java.io.PrintStream(new java.io.File("/home/bborschi/research/np-bayes/untracked/acl_13features_l1priorMurphyMixMH.txt"),"utf-8")
+                                                  //> posterior  : java.io.PrintStream = java.io.PrintStream@76fe005b
+  val samples=optimizer.samplersMultivariate.mhsample(map.data, logpdf, proplpdf, prop, 1000, 1000,10,true)
+                                                  //> rejrate: 0.99872625
+                                                  //| samples  : Array[Array[Double]] = Array(Array(-1.3240548856369794, -0.12166
+                                                  //| 13740091415, 0.5657187389564846, 0.013015225841847902, -0.4151850887035139,
+                                                  //|  0.24698086879254003, -0.5079227003250216, 0.239628443027968, 0.10265002670
+                                                  //| 992557, -0.6760378827442559, 0.013728471284008448), Array(-1.32405488563697
+                                                  //| 94, -0.1216613740091415, 0.5657187389564846, 0
+                                                  //| Output exceeds cutoff limit.|
+    
   for (x<-samples) {
     for (i <- x)
       posterior.printf(i+" ")

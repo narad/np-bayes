@@ -21,6 +21,7 @@ import scala.collection.mutable.ListBuffer
 import java.io.PrintStream
 import npbayes.distributions.MAXPROB
 import npbayes.maxent.LogisticRegression
+import breeze.linalg.DenseVector
 
 abstract class LexGenerator
 case object UNIUNLEARNED extends LexGenerator
@@ -124,7 +125,7 @@ object wordseg {
 	  loglearn = options.LOGLEARN
 	features = options.FEATURES match {
 	  case "no" => Data.featuresNo
-	  case "left" => Data.featuresN
+	  case "right" => Data.featuresN
 	  case "leftright" => Data.featuresPN
 	  case "leftrightident" => Data.featuresPNIdent
 	  case "interaction" => Data.featuresInteraction
@@ -189,6 +190,17 @@ object wordseg {
 	    case "LANGMODEL" =>
 	      model.gibbsSweepWords(_)
 	  }
+	  
+	  def prettyString(x: DenseVector[Double]): String = {
+	    val res = new ListBuffer[Double]
+	    var i = 0
+	    while (i<x.size) {
+	      res += x(i)
+	      i+=1
+	    }
+	    res.mkString(" ")
+	  }
+	  
 	  val traceFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".trace"),"utf-8")
 	  val sampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".samples"),"utf-8")
 	  hyperSampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".hypersamples"),"utf-8")
@@ -221,7 +233,7 @@ object wordseg {
 	    	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
 	    	else
-	    	  " "} + model.data.delModel1.weights +
+	    	  " "} + prettyString(model.data.delModel1.weights) +
 	    	  " " + model.hyperParam
 	    println(log); traceFile.println(log)
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {
