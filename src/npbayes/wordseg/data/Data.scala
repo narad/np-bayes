@@ -31,6 +31,8 @@ case object WBoundary extends Boundary
 case object UBoundary extends Boundary
 
 
+
+
 abstract class PhonemeType
 case class PType(x: Int) extends PhonemeType {
   override def toString = SymbolClassTable(x)
@@ -160,6 +162,29 @@ object Data {
     x(_)}
   )
   
+  val featuresCoetzee = (4, {def x(w1w2: (WordType,WordType)): Array[Double] = {
+    val (w1,w2) = w1w2
+    val res = Array.fill[Double](4)(0.0)
+    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
+    val w2first = PhonemeClassMap.getClass(w2(0))
+    res(0) = SymbolClassTable(w1prev) match {
+      case "CONS" => -1.0
+      case _ => 0.0
+    }
+    res(1) = -1.0 //this is a vector for predicting deletion...==> surface will have one less segment
+    res(2) = SymbolClassTable(w2first) match {
+      case "VOWL" => -1.0
+      case _ => 0.0
+    }
+    res(3) = SymbolClassTable(w2first) match {
+      case "SIL" => -1.0
+      case _ => 0.0
+    }    
+    res
+  } 
+  x(_)  
+  })
+  
   val featuresPNIdent = (4, {def x(w1w2: (WordType,WordType)): Array[Double] = {
 	    val (w1,w2) = w1w2
 	    val res = Array.fill[Double](4)(0.0)
@@ -246,7 +271,7 @@ object Data {
 }
 
 
-class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*", val DROP1: String = "T", val MISSING2: String="DROPD", val DROP2: String = "D", val nAndFeatures: (Int, ((WordType,WordType))=>Array[Double])=Data.featuresPN) {
+class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*", val DROP1: String = "T", val MISSING2: String="DROPD", val DROP2: String = "D", val nAndFeatures: (Int, ((WordType,WordType))=>Array[Double])=Data.featuresPN) {
 	val _random = new Random()
 	//Special Characters
 	val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
@@ -340,6 +365,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	 * for the logistic regression model
 	 */
 	def updateDel1Model = {
+	  assert(phonVar)
 	  val relWords = words.filter(x => x._2._1.lastSeg==DROPSEG1 && x._2._1.length>1)
 //	  println("Size relWords: "+relWords.size)
 	  val inputs =  relWords.toList.map(f => ((f._2._1,
@@ -358,6 +384,7 @@ class Data(fName: String, val dropProb: Double = 0.0,val MISSING1: String = "*",
 	}
 	
 	def updateDel1ModelSample = {
+	  assert(phonVar)
 	  val relWords = words.filter(x => x._2._1.lastSeg==DROPSEG1 && x._2._1.length>1)
 //	  println("Size relWords: "+relWords.size)
 	  val inputs =  relWords.toList.map(f => ((f._2._1,

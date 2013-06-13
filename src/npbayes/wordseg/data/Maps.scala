@@ -32,3 +32,4 @@ object PhonemeClassMap {
       PType(pmap(x))
     }
 }
+

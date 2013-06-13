@@ -34,13 +34,12 @@ object Bigram {
 }
 
 class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Array[Double]),var concentrationUni: Double,discountUni: Double=0,var concentrationBi: Double, var discountBi: Double=0,val pStop: Double = 0.5, val assumption: HEURISTIC = EXACT,
-    		  val dropSeg: String = "KLRK", val dropInd: String = "KLRK",val dropProb: Double = 0.0,
-    		  val lexgen: LexGenerator) extends WordsegModel {
+    		  val dropSeg: String = "KLRK", val dropInd: String = "KLRK",val lexgen: LexGenerator, val phonVar: Boolean=false) extends WordsegModel {
 	require(0<=discountUni && discountUni<1)
 	require(if (discountUni==0) concentrationUni>0 else concentrationUni>=0)
 	
 	val unif= new Random
-	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"","",features)
+	val data = new Data(corpusName,phonVar,dropInd,dropSeg,"","",features)
 	val pypUni = { 
 		val tlexgen = lexgen match {
 		  case BIUNLEARNED =>
@@ -104,7 +103,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	 }
 
 	def toSurface(u: WordType, o:WordType,rU: WordType): Double = {
-	  if (wordseg.wordseg.dropInferenceMode==IGNOREDROP) {
+	  if (phonVar==false) {
 	    if (u==o)
 	      1.0
 	    else
@@ -118,7 +117,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	
 	override def init(gold:Boolean = false, binitProb:Double = 0.5) = { 
 	  def inner(bPos: Int): Unit = 
-	    if (bPos>=data.nBoundaries)
+	    if (bPos>data.nBoundaries)
 	      Unit
 	    else 
 	      boundaries(bPos) match {
@@ -144,7 +143,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	    data.buildWords
 	  }
 	  val res = inner(1)
-	  data.updateDel1Model
+	  if (phonVar) data.updateDel1Model
 	  if (wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
 	}	
@@ -409,34 +408,30 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	
 
 	override def optimizeConcentration = {
-      val tmpOptim = new BrentOptimizer(0.00001,0.000001)
-      
-      	
-      def optimUni = {
-    	val logpdfUni = new UnivariateFunction {
-    	  def value(alpha: Double): Double = {
-    	    if (alpha<0)
-    		  return Double.NegativeInfinity
-	        var result = 0
-	        val logPrior =
-	          if (wordseg.wordseg.shape != -1)
-		        Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
-		      else
-		        0
-	        pypUni.logProbSeating(alpha)+logPrior
-	      }
-        }        
-        pypUni.concentration = tmpOptim.optimize(20, logpdfUni,org.apache.commons.math3.optimization.GoalType.MAXIMIZE,0.0,32768.0).getPoint()
-	    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration-1+" "+logpdfUni.value(pypUni.concentration-1)+"\n")
-	    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration+" "+logpdfUni.value(pypUni.concentration)+" <-\n")	      
-	    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration+1+" "+logpdfUni.value(pypUni.concentration+1)+"\n")	              
+		def optimUni =  {
+		    def logpdfUni(alpha: Double): Double = 
+	    	    if (alpha<0)
+	    		  Double.NegativeInfinity
+	    		else {
+			        var result = 0
+			        val logPrior =
+			          if (wordseg.wordseg.shape != -1)
+				        Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
+				      else
+				        0
+			        pypUni.logProbSeating(alpha)+logPrior
+	    		}     
+	        //pypUni.concentration = tmpOptim.optimize(20, logpdfUni,org.apache.commons.math3.optimization.GoalType.MAXIMIZE,0.0,32768.0).getPoint()
+	    	pypUni.concentration = optimizer.approxGradientDescent1D(pypUni.concentration, logpdfUni, 0.0001, 100, 0.01)
+		    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration-1+" "+logpdfUni(pypUni.concentration-1)+"\n")
+		    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration+" "+logpdfUni(pypUni.concentration)+" <-\n")	      
+		    wordseg.wordseg.hyperSampleFile.print(pypUni.concentration+1+" "+logpdfUni(pypUni.concentration+1)+"\n")	              
       }
             
 	  def optimBiCoupled = {
-	      val logpdfBi = new UnivariateFunction {
-	        def value(alpha: Double): Double = {
+	      def logpdfBi(alpha: Double): Double = {
 	    	  if (alpha<0)
-	            return Double.NegativeInfinity
+	            Double.NegativeInfinity
 		      var result = 0
 		      val logPrior = 
 		        if (wordseg.wordseg.shape != -1)
@@ -451,16 +446,16 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 		      assert(res!=Double.NegativeInfinity)
 		      res + logPrior
 		  }
-	      }
-	      val newSharedBigramAlpha = tmpOptim.optimize(50, logpdfBi, org.apache.commons.math3.optimization.GoalType.MAXIMIZE, 0.0, 32768.0).getPoint()
+	      val newSharedBigramAlpha = optimizer.approxGradientDescent1D(concentrationBi, logpdfBi, 0.0001, 100, 0.5)
 	      val biIt = pypBis.values.iterator	      
 	      while (biIt.hasNext) {
 	        biIt.next().setConcentration(newSharedBigramAlpha)
 	      }
 	      concentrationBi = newSharedBigramAlpha
-/*	      wordseg.wordseg.hyperSampleFile.print(concentrationBi-1+" "+logpdfBi.value(concentrationBi-1)+"\n")
-	      wordseg.wordseg.hyperSampleFile.print(concentrationBi+" "+logpdfBi.value(concentrationBi)+" <-\n")	      
-	      wordseg.wordseg.hyperSampleFile.print(concentrationBi+1+" "+logpdfBi.value(concentrationBi+1)+"\n\n")*/	      
+	      wordseg.wordseg.hyperSampleFile.print("Bi:\n")
+	      wordseg.wordseg.hyperSampleFile.print(concentrationBi-1 + " " + logpdfBi(concentrationBi-1)+"\n")
+	      wordseg.wordseg.hyperSampleFile.print(concentrationBi+" "+logpdfBi(concentrationBi)+" <-\n")	      
+	      wordseg.wordseg.hyperSampleFile.print(concentrationBi+1+" "+logpdfBi(concentrationBi+1)+"\n\n")	      
       }
       optimUni
       optimBiCoupled  
@@ -492,8 +487,8 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	    0
 	  }
 	  if (wordseg.DEBUG)
-		  println("lp1: "+lp1+"\nlp2: "+lp2+"\nlp3:" +lp3+"\nlp4:"+lp4+"\nlp5:"+data.delModelProb)
-	  lp1 + lp2 + lp3 + lp4+data.delModelProb
+		  println("lp1: "+lp1+"\nlp2: "+lp2+"\nlp3:" +lp3+"\nlp4:"+lp4+{if (phonVar) "\nlp5:"+data.delModelProb else ""})
+	  lp1 + lp2 + lp3 + lp4+ {if (phonVar) data.delModelProb else 0}
 	}
 	
 	override def logProb: Double = { 
@@ -573,11 +568,13 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	  for (i: Int <- 1 until data.nBoundaries) {
 	  	  resampleWords(i,anneal)
 	  }
-	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP) wordseg.wordseg.loglearn match {
+	  if (phonVar) wordseg.wordseg.loglearn match {
 	    case "optimize" => data.updateDel1Model 
 	    case "sample" => data.updateDel1ModelSample
 	    case _ => throw new Error("--loglearn has to be either 'optimize' or 'sample'")
 	  }
 	  logProb
 	}
+	
+	def uniTables = pypUni._tCount
 }

@@ -65,7 +65,7 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def ANNEALITERS = getInt("--annealIters",1000); params += (("annealIters",ANNEALITERS))
 	def STARTTEMP = getDouble("--startTemp",1); params += (("startTemp",STARTTEMP))
 	def STOPTEMP = getDouble("--stopTemp",1); params += (("stopTemp",STOPTEMP))
-	def DROPPROB = getDouble("--dropProb",0.0); params += (("dropProb",DROPPROB)) //if set to -1, do inference, if set to 0.0, ignore
+	def PHONVAR = getBoolean("--phonVar",false); params += (("phonVar",PHONVAR)) //if set to -1, do inference, if set to 0.0, ignore
 	def DROPSEG = getString("--dropSeg","NONE"); params += (("dropSeg",DROPSEG)) //what is the dropSegment (segment that actually occurs)
 	def DROPIND = getString("--dropInd","NONE"); params += (("dropInd",DROPIND)) //what is the indicator (for evaluation)
 	def INPUT = getString("--input",""); params += (("input",INPUT))
@@ -77,8 +77,6 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def BURNIN = getInt("--burnin",2000); params += (("burnin",BURNIN))
 	def SAMPLES = getInt("--sampleEvery",10); params += (("sampleEvery",SAMPLES))
 	def BOUNDINITPROB = getDouble("--binitProb",0.0); params += (("binitProb",BOUNDINITPROB))
-	def DROPPRIOR = getDouble("--dropPrior",1.0); params += (("dropPrior",DROPPRIOR))
-	def NODROPPRIOR = getDouble("-noDropPrior",1.0); params += (("noDropPrior",NODROPPRIOR))
 	def FEATURES = getString("--features","no"); params += (("features",FEATURES))
 	def LOGLEARN = getString("--loglearn","optimize"); params += (("loglearn",LOGLEARN))
 	def DELAYRECOVERY = getBoolean("--delayRecovery",true); params += (("delayRecovery",DELAYRECOVERY))  //if set to true, no recovery during annealing
@@ -130,6 +128,7 @@ object wordseg {
 	  case "leftrightident" => Data.featuresPNIdent
 	  case "interaction" => Data.featuresInteraction
 	  case "bigset" => Data.featuresPNInteraction
+	  case "coetzee" => Data.featuresCoetzee
 	}
 	hsampleiters = options.HSAMPLEITERS
 	hsample = options.HSAMPLE
@@ -140,11 +139,7 @@ object wordseg {
 	binitProb = options.BOUNDINITPROB
 	
 	  
-	  dropInferenceMode = options.DROPPROB match {
-	    case 0.0 => IGNOREDROP
-	    case -1.0 => INFERDROP(options.DROPPRIOR,options.NODROPPRIOR)
-	    case _ => FIXDROP(options.DROPPROB)
-	  }
+
 	  shape = options.SHAPE
 	  rate = options.RATE
 	  hyperparam = options.HYPERPARAM
@@ -173,12 +168,13 @@ object wordseg {
 	          BILEARNEDVOWELS
 	      }
 	  } 
-	  
+
+	  val phonVar = options.PHONVAR
 	  val model: WordsegModel = options.NGRAM match {
 	    case "1" =>
-	      new Unigram(options.INPUT,features,options.ALPHA0,0,options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)
+	      new Unigram(options.INPUT,features,options.ALPHA0,0,options.PSTOP,assumption,options.DROPSEG,options.DROPIND,lexgen,phonVar)
 	    case "2" =>
-	      new Bigram(options.INPUT,features,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,options.DROPPROB,lexgen)	      
+	      new Bigram(options.INPUT,features,options.ALPHA0,0,options.ALPHA1,0, options.PSTOP,assumption,options.DROPSEG,options.DROPIND,lexgen,phonVar)	      
 	  }
 	  
 	  def annealTemperature(x: Int) = 	    //npbayes.wordseg.annealTemperature(x)
@@ -212,12 +208,12 @@ object wordseg {
 	    	  " -1"
 	    	else " "}
 //	    	  " " + model.data.showDropProbs} +
-	    	  + " " + model.hyperParam)
+	    	  + " " + model.hyperParam+ {if (options.NGRAM=="1") " "+model.uniTables else ""})
 	  traceFile.println(0+" "+1+" "+model.logProb+" "+model._logProbTrack+" "+model.evaluate +   	{if (dropInferenceMode==IGNOREDROP)
 	    	  " -1"
 	    	else
 	    	  " "} // + model.data.showDropProbs} +
-	    	  + " " + model.hyperParam)
+	    	  + " " + model.hyperParam + {if (options.NGRAM=="1") " "+model.uniTables else ""})
 	    	  
 	  for (i <- 1 to options.ITERS) {
 	    val temperature: Double = annealTemperature(i)
@@ -229,12 +225,11 @@ object wordseg {
 	      case "optimize" => model.optimizeConcentration
 	    }
 	    
-	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model._logProbTrack+" "+model.evaluate + 
-	    	{if (dropInferenceMode==IGNOREDROP)
-	    	  " -1"
-	    	else
-	    	  " "} + prettyString(model.data.delModel1.weights) +
-	    	  " " + model.hyperParam
+	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model._logProbTrack+" "+model.evaluate+
+	    		{ if (phonVar)
+	    			prettyString(model.data.delModel1.weights)
+	    		  else "" } +
+	    	  " " + model.hyperParam + {if (options.NGRAM=="1") " "+model.uniTables else ""}
 	    println(log); traceFile.println(log)
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {
 	      model.writeAnalysis(sampleFile)

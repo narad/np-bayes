@@ -42,12 +42,12 @@ case class UnigramFinalContext(val wO: WordType, val wU: WordType, val wD: WordT
 }					  
 					  
 
-class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>Array[Double]),concentration: Double,discount: Double=0,val pWB: Double = 0.5, val assumption: HEURISTIC = EXACT,val dropSeg: String = "KLRK", val dropInd: String = "KLRK", val dropProb: Double =0.0,
-    val lexgen: LexGenerator) extends WordsegModel {
+class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>Array[Double]),concentration: Double,discount: Double=0,val pWB: Double = 0.5, val assumption: HEURISTIC = EXACT,val dropSeg: String = "KLRK", val dropInd: String = "KLRK",
+    val lexgen: LexGenerator, val phonVar: Boolean=false) extends WordsegModel {
 	require(0<=discount && discount<1)
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0 
-	val data = new Data(corpusName,dropProb,dropInd,dropSeg,"0","0",features)
+	val data = new Data(corpusName,phonVar,dropInd,dropSeg,"0","0",features)
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
 	//val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	val pypUni = {
@@ -87,7 +87,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	 * make sure distortion only happens when we actually use a model with drops
 	 */
 	def toSurface(u: WordType,s: WordType, r:WordType): Double = {
-	  if (wordseg.wordseg.dropInferenceMode==IGNOREDROP) {
+	  if (phonVar==false) {
 	    if (u==s)
 	      1.0
 	    else
@@ -135,7 +135,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	    data.buildWords
 	  }
 	  val res = inner(0)
-	  data.updateDel1Model
+	  if (phonVar) data.updateDel1Model
 	  if (wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
 	}	
@@ -187,8 +187,11 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	      pypUni.logProbSeating(alpha)+logPrior
 	    }
-      
-      pypUni.concentration = optimizer.approxGradientDescent1D(pypUni.concentration,logpdf)  
+      val concentrationUni = optimizer.approxGradientDescent1D(pypUni.concentration,logpdf)
+      pypUni.concentration = concentrationUni
+      wordseg.wordseg.hyperSampleFile.print(concentrationUni-1 + " " + logpdf(concentrationUni-1)+"\n")
+      wordseg.wordseg.hyperSampleFile.print(concentrationUni+" "+logpdf(concentrationUni)+" <-\n")	      
+      wordseg.wordseg.hyperSampleFile.print(concentrationUni+1+" "+logpdf(concentrationUni+1)+"\n\n")      
 	}	  
 
    
@@ -345,7 +348,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 //		  println("Resample "+i)
 		  resample(i,anneal)
 	  }
-	  data.updateDel1Model
+	  if (phonVar) data.updateDel1Model
 	  logProb
 	}
 
@@ -388,7 +391,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	  for (i: Int <- shuffle(1 to data.uboundaries.last)) {
 		  resampleWords(i,anneal)
 	  }
-	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP) data.updateDel1ModelSample
+	  if (phonVar) data.updateDel1ModelSample
 	  logProb
 	}
 	
@@ -400,12 +403,14 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	  						2*Gamma.logGamma(betaUB/2.0)-Gamma.logGamma(nTokens+betaUB)
 	  if (npbayes.wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
-	  pypUni.logProb + data.delModelProb + {
+	  pypUni.logProb + {if (phonVar) data.delModelProb else 0} + {
 	    if (wordseg.wordseg.hyperparam!="no")
 	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	    else
 	      0
 	  } + lpBoundaries
 	} 
+	
+	def uniTables: Int = pypUni._tCount
 
 }

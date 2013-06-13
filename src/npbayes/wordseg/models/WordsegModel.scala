@@ -5,6 +5,7 @@ import npbayes.wordseg.data.Data
 
 abstract class WordsegModel {
 	val data: Data
+	val phonVar: Boolean
 	def sanity: Boolean = false
 	def init(gold:Boolean = false, goldType:Double=0.5) = {}
 	def logProb: Double = 0.0
@@ -19,7 +20,8 @@ abstract class WordsegModel {
 	def resampleConcentration(hsiters: Int=1): Unit = {}
 	
 	def optimizeConcentration: Unit = {}
-
+	
+	def uniTables: Int
 	
 	def hyperParam: String = ""
 	
