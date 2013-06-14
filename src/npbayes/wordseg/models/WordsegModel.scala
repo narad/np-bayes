@@ -6,6 +6,8 @@ import npbayes.wordseg.data.Data
 abstract class WordsegModel {
 	val data: Data
 	val phonVar: Boolean
+	
+	def uniCustomers = 0
 	def sanity: Boolean = false
 	def init(gold:Boolean = false, goldType:Double=0.5) = {}
 	def logProb: Double = 0.0

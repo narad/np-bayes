@@ -1,6 +1,6 @@
 package object optimizer {
-	val eps = 0.0001
-	def approxGradientDescent1D(x: Double, f: Double => Double, threshold: Double = 0.0001, maxIters: Int = 100, pstepSize: Double = 0.5): Double = {
+	val eps = 1
+	def approxGradientDescent1D(x: Double, f: Double => Double, threshold: Double = 0.000000, maxIters: Int = 100000, pstepSize: Double = 0.5): Double = {
 		def approxGrad(y: Double) = {
 			val y1 = f(y)
 			val y2 = f(y+eps)
@@ -29,6 +29,7 @@ package object optimizer {
 		  }
 		  iters+=1	  
 		}
+		print("After "+iters+" iterations\n")
 		cur
 	}
 }

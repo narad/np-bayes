@@ -198,7 +198,21 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
 
   def logProbSeating(c: Double) =
     _logProbSeating(c,discount)
+
     
+  /**
+   * just what depends on alpha
+   */
+  def propLogProb (concentration: Double) = {
+    var res = Gamma.logGamma(concentration)-Gamma.logGamma(_oCount+concentration)
+    if (discount==0)
+      res += _tCount*math.log(concentration)
+    else
+      res += (_tCount*math.log(discount)+Gamma.logGamma(concentration/discount+_tCount)-
+    		  Gamma.logGamma(concentration/discount))
+    res
+  }
+      
   /**
    * just the seating-arrangement
    */
@@ -360,6 +374,8 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
       (remCusts-discount)/(_oCount+concentration)
     }
   }
+
+  
 
   def _logProbSeatingByConc: (Double => Double) = 
     _logProbSeating(_: Double, discount)

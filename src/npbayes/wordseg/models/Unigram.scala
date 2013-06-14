@@ -22,6 +22,7 @@ import npbayes.WordType
 import org.apache.commons.math3.analysis.UnivariateFunction
 import org.apache.commons.math3.optimization.univariate.BrentOptimizer
 import breeze.optimize.LBFGS
+import breeze.linalg.DenseVector
 
 
 
@@ -55,9 +56,9 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	    case UNIUNLEARNED =>
 	    	new MonkeyUnigram(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.5)
 	    case UNILEARNED =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.1,false)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,1.0,false)
 	    case UNILEARNEDVOWELS =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.1,true)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,1.0,true)
 	    case _ =>
 	      throw new Error("invalid value for lexgen: "+lexgen)
 	  }
@@ -144,7 +145,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
    override def hyperParam: String = "alpha0 "+pypUni.concentration
    
 
-   
+   override def uniCustomers = pypUni._oCount
    
    override def resampleConcentration(hsiters: Int = 1) = {
       def proposallogpdf(x: Double,y: Double): Double = {
@@ -154,11 +155,11 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
       def proposalsample(y: Double): Double = {
         nextGaussian(y, math.abs(y)*wordseg.wordseg.hsmhvar)
       }
-
+      
       def logpdf(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
-	      pypUni.logProbSeating(alpha)+logPrior
+	      pypUni.propLogProb(alpha)+logPrior
 	    }
       val alpha0 = wordseg.wordseg.hsample match {
         case "slice" | "sliceadd" | "slicecheck" =>
@@ -185,9 +186,13 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
       def logpdf(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
-	      pypUni.logProbSeating(alpha)+logPrior
+	      pypUni.propLogProb(alpha)+logPrior
 	    }
+      def logpdfV(alpha: DenseVector[Double]): Double = logpdf(alpha.data(0))
+      val lbfgs = new breeze.optimize.LBFGS[DenseVector[Double]](1000,3)
+      
       val concentrationUni = optimizer.approxGradientDescent1D(pypUni.concentration,logpdf)
+//      val concentrationUni = lbfgs.minimize(new breeze.optimize.ApproximateGradientFunction(logpdfV), DenseVector.fill(1)(pypUni.concentration)).data(0)      
       pypUni.concentration = concentrationUni
       wordseg.wordseg.hyperSampleFile.print(concentrationUni-1 + " " + logpdf(concentrationUni-1)+"\n")
       wordseg.wordseg.hyperSampleFile.print(concentrationUni+" "+logpdf(concentrationUni)+" <-\n")	      
@@ -391,7 +396,11 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	  for (i: Int <- shuffle(1 to data.uboundaries.last)) {
 		  resampleWords(i,anneal)
 	  }
-	  if (phonVar) data.updateDel1ModelSample
+	  if (phonVar) 
+	    wordseg.wordseg.loglearn match {
+	      case "sample" => data.updateDel1ModelSample
+	      case "optimize" => data.updateDel1Model
+	    }
 	  logProb
 	}
 	
@@ -401,14 +410,16 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	  val nonFinal = nTokens - nUtterances
 	  val lpBoundaries = Gamma.logGamma(nonFinal+betaUB/2.0)+Gamma.logGamma(nUtterances+betaUB/2.0)+Gamma.logGamma(betaUB)-
 	  						2*Gamma.logGamma(betaUB/2.0)-Gamma.logGamma(nTokens+betaUB)
-	  if (npbayes.wordseg.DEBUG)
-		  assert(pypUni.sanityCheck)
-	  pypUni.logProb + {if (phonVar) data.delModelProb else 0} + {
-	    if (wordseg.wordseg.hyperparam!="no")
+	  val lp1 = pypUni.logProb
+	  val lp2 = if (phonVar) data.delModelProb else 0
+	  val lp3 = if (wordseg.wordseg.hyperparam!="no")
 	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	    else
-	      0
-	  } + lpBoundaries
+	      0 
+	  if (npbayes.wordseg.DEBUG)
+		  assert(pypUni.sanityCheck)
+	  System.err.println("lp1: "+ lp1 + " lp2: "+ lp2+ " boundaries: "+ lpBoundaries)		  
+	  lp1 + lp2 + lp3+lpBoundaries
 	} 
 	
 	def uniTables: Int = pypUni._tCount

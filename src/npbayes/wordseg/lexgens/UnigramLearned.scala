@@ -6,74 +6,72 @@ import npbayes.wordseg.data.SegmentType
 import java.util.HashMap
 import org.apache.commons.math3.special.Gamma
 import java.util.{Iterator => JIterator}
+import npbayes.wordseg.data.SymbolSegTable
+import npbayes.wordseg.data.SymbolClassTable
+import npbayes.wordseg.data.PhonemeClassMap
 
 
 /**
  * we assume a uniform dirichlet prior, with minor simplifications in the implementation
- * in particular, we don't renormalize the distribution as to adjust for "empty" words
- * and the fact that the WB can only occur at the end of a word
- * also, we won't consider word-internal changes to predictive probability
+ * in particular, we don't consider word-internal changes to predictive probability
+ * 
+ * this corresponds to a grammar of the form
+ * Word --> Segs     [1.0]
+ * Segs --> Seg      [a]
+ * Segs --> Segs Seg [1-a]
+ * 
+ * with _predWB giving the probability a of using the terminating rule which is learned
+ * assuming a symmetric 1,1-Beta prior.
+ * 
+ * the vowel-constraint just takes away mass, but the renormalization is done trivially if required
  */
 
 class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vowelConstraint: Boolean = false) extends PosteriorPredictive[WordType] {
-  val WB: SegmentType = -1000
+  def isVowel(x: SegmentType) =SymbolClassTable(PhonemeClassMap.getClass(x))=="VOWEL"
   val normalizer: Double = nSegments*pseudoCount
   var obsCounts: Int = 0 //total number of observed segments
-  val phonCounts: HashMap[SegmentType,Integer] = new HashMap //individual counts for observations
-  def isVowel = npbayes.wordseg.wordseg.isVowel(_)
-
+  var wordCount: Int = 0
+  var branchCount: Int = 0
+  val phonCounts: Array[SegmentType] = Array.fill(SymbolSegTable.nSymbols)(0)
+  
+  def _predWB =
+    (wordCount + 1) / (wordCount+branchCount+2.0)
   
   def _predPhon(seg: SegmentType) = {
-    val nC = phonCounts.get(seg)
-    if (nC==null) {
-    	(pseudoCount)/(obsCounts+normalizer)      
-    } else {
-      (nC + pseudoCount)/(obsCounts+normalizer)
-    }
-
+    val nC: Int = phonCounts(seg-1) 
+    (nC+pseudoCount)/(obsCounts+normalizer)
   }
   
   /**
-   * slight simplification --- no intermediate update
+   * simplification --- no intermediate update, no correction for vowel-mass
    */
   def predProb(obs: WordType): Double = {
-	    var hasVowel: Boolean = false
-    	var p = 1.0
-    	for (seg <- obs) {
-	      if (isVowel(seg))
-	        hasVowel = true
-	      p = p*_predPhon(seg)
-	      // _addPhon(seg) //uncomment for 'exactness'
-	    }
-	    val res = p*_predPhon(WB)
-	    /** uncomment for 'exactness'
-		val segs2 = obs.iterator()
-	    while (segs2.hasNext()) {
-	      _removePhon(seg2.next()) 
-	    }
-	     */
-	  if (hasVowel || !vowelConstraint)
-		res
-	  else
-	    0.0
+    var hasVowel: Boolean = false
+    var p = 1.0
+    val continue = (1-_predWB)
+    for (seg <- obs) {
+      if (vowelConstraint && isVowel(seg))
+        hasVowel = true
+      p = p*_predPhon(seg)
+      if (hasVowel)
+        p = p*continue
+    }
+    val res = p*((1-continue)/continue)
+    if (hasVowel || !vowelConstraint)
+     res
+    else
+     0
   }
   
   def _addPhon(s: SegmentType) = {
-    val old = phonCounts.get(s)
-    if (old==null)
-    	phonCounts.put(s,1)
-    else
-    	phonCounts.put(s,old+1)      
+	phonCounts(s-1)+=1
     obsCounts+=1
   }
   
   def _removePhon(s: SegmentType) = {
-    val old = phonCounts.get(s)
-    if (old==null) throw new Error("can't remove "+s+" in BigramLearned._removePhone")      
-    if (old-1==0)
-      phonCounts.remove(s)
-    else
-      phonCounts.put(s,old-1)
+	phonCounts(s-1)-=1
+	if (phonCounts(s-1)<0)
+      throw new Error("can't remove "+s+" in UnigramLearned._removePhone")
     obsCounts-=1
   }
 
@@ -81,44 +79,75 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
    * returns exact probability
    */
   def update(obs:  WordType): Double = {
-    	var hasVowel = false
-	    var p=1.0
-	    for (seg <- obs){
-	      if (isVowel(seg))
-	        hasVowel = true
-	      p = p*_predPhon(seg)
-	      _addPhon(seg)
-	    }
-	    val res = p*_predPhon(WB)
-	    _addPhon(WB)
-	    if (hasVowel || !vowelConstraint)
-          res
-	    else
-	      throw new Error("Can't add word without vowel: "+ npbayes.wordseg.data.wToS(obs))
+    var p=1.0
+    var hasVowel = false
+    var i = 0
+    while (i<obs.size-1) {
+      if (vowelConstraint && isVowel(obs(i)))
+        hasVowel = true
+      p = p*_predPhon(obs(i))
+      if (hasVowel || !vowelConstraint) {
+        p = p * (1-_predWB)
+        branchCount+=1
+      }
+      _addPhon(obs(i))
+      i+=1
+    }
+    if (vowelConstraint && isVowel(obs(i)))
+      hasVowel=true
+    val res = p*_predPhon(obs(i))*_predWB
+    _addPhon(obs(i))
+    wordCount+=1
+    if (hasVowel || !vowelConstraint)
+    	res
+    else
+      throw new Error("Can't add word without vowel: "+ npbayes.wordseg.data.wToS(obs))
+
   }
 
-  def remove(obs: WordType): Double = { 
-	    var p=1.0
-	    _removePhon(WB)
-	    p=p*_predPhon(WB)
-	    for (seg <- obs.reverse) {
-	      _removePhon(seg)
-	      p*=_predPhon(seg)
-	    }
-	    p
+  def remove(obs: WordType): Double = {
+    // find the j such that there are no Vowels until position j
+    // need this because Branch is only an option once we generated
+    // a vowel
+    var j = 0
+    var foundV = false
+    while (j<obs.size && !foundV) {
+      if (vowelConstraint && isVowel(obs(j)))
+        foundV=true
+      else
+        j+=1
+    }
+    var p=1.0
+    var i=obs.size-1
+    wordCount-=1
+    _removePhon(obs(i))
+    p=p*_predWB*_predPhon(obs(i))
+    i-=1
+    while (i>=0) {
+      _removePhon(obs(i))
+      p*=_predPhon(obs(i))
+      if (i>=j || !vowelConstraint) {
+        branchCount-=1
+        p*=(1-_predWB)
+      }
+      i-=1
+    }
+    p
   }
   
   
   /**
-   * standard DirichletMultinomialCompound,
+   * first part is your standard DirichletMultinomialCompound,
+   * second part is the little Bigram-model trickery for Utterance Boundaries
    */
   override def logProb = {
-    var res = Gamma.logGamma(normalizer)-Gamma.logGamma(obsCounts+normalizer)
-    val cIt = phonCounts.values.iterator
-    while (cIt.hasNext) {
-      val count = cIt.next()
-      res+=Gamma.logGamma(count+pseudoCount)-Gamma.logGamma(pseudoCount)
+    var result: Double = Gamma.logGamma(normalizer)-Gamma.logGamma(obsCounts+normalizer)
+    var i = 0
+    while (i<phonCounts.length) {
+      result +=Gamma.logGamma(phonCounts(i)+pseudoCount)-Gamma.logGamma(pseudoCount)
+      i+=1
     }
-    res
-  }
+    result + Gamma.logGamma(2.0)-Gamma.logGamma(wordCount+branchCount+2.0)+
+    Gamma.logGamma(branchCount+1.0)-2*Gamma.logGamma(1.0)+Gamma.logGamma(wordCount+1.0)
+ }
 }

@@ -62,216 +62,10 @@ case class MedialContext(leftU: WordType,w1U: WordType, w1O: WordType, w1D1: Wor
 case class FinalContext(leftU: WordType, w1U: WordType, w1O: WordType, w1D1: WordType, w1D2: WordType,
 						w1Start: Int) extends AContext					
 
-object Data {
-   
-  val featuresNo = (1, {
-    val res = Array.fill[Double](1)(1.0) 
-    def x(w1w2: (WordType,WordType)): Array[Double] = res
-    x(_)
-  })
-   
-  
-  val featuresPNInteraction = (11, {def x(w1w2: (WordType,WordType)): Array[Double] = {
-	    val (w1,w2) = w1w2
-	    val res = Array.fill[Double](11)(0.0)
-	    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
-	    val w2first = PhonemeClassMap.getClass(w2(0))
-	    val interaction = (SymbolClassTable(w1prev),SymbolClassTable(w2first))
-	    res(0) = interaction match {
-	  					  case ("CONS","CONS") => 1.0
-	  					  case _ => 0.0
-	    		 }
-	    res(1) = interaction match {
-	  					  case ("CONS","VOWL") => 1.0
-	  					  case _ => 0.0
-	    		 } 	    
-	    res(2) = interaction match {
-	  					  case ("CONS","SIL") => 1.0
-	  					  case _ => 0.0
-	    		 } 	    
-	    res(3) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("VOWL","CONS") => 1.0
-	  					  case _ => 0.0
-	    		 }
-	    res(4) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("VOWL","VOWL") => 1.0
-	  					  case _ => 0.0
-	    		 }        	    
-	    res(5) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("VOWL","SIL") => 1.0
-	  					  case _ => 0.0
-	    		 }        	    
-	    res(6) = SymbolClassTable(w1prev) match {
-	  					  case "CONS" => 1.0
-	  					  case _ => 0.0
-	    		 }
-	    res(7) = SymbolClassTable(w1prev) match {
-	  					  case "VOWL" => 1.0
-	  					  case _ => 0.0
-	    		 }    
-	    res(8) = SymbolClassTable(w2first) match {
-	  					  case "CONS" => 1.0
-	  					  case _ => 0.0
-	    		 }    
-	    res(9) = SymbolClassTable(w2first) match {
-	  					  case "VOWL" => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res(10) = SymbolClassTable(w2first) match {
-	  					  case "SIL" => 1.0
-	  					  case _ => 0.0
-	    		 }  	    
-	    
-	    res
-   	}
-    x(_)}
-  )
-  
-    val featuresInteraction = (6, {def x(w1w2: (WordType,WordType)): Array[Double] = {
-	    val (w1,w2) = w1w2
-	    val res = Array.fill[Double](6)(0.0)
-	    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
-	    val w2first = PhonemeClassMap.getClass(w2(0))
-	    val interaction = (SymbolClassTable(w1prev),SymbolClassTable(w2first))
-	    res(0) = interaction match {
-	  					  case ("CONS","CONS") => 1.0
-	  					  case _ => 0.0
-	    		 } 
-	    res(1) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("CONS","VOWL") => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res(2) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("CONS","SIL") => 1.0
-	  					  case _ => 0.0
-	    		 }
-	    res(3) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("VOWL","CONS") => 1.0
-	  					  case _ => 0.0
-	    		 }    
-	    res(4) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("VOWL","VOWL") => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res(5) = (SymbolClassTable(w1prev),SymbolClassTable(w2first)) match {
-	  					  case ("VOWL","SIL") => 1.0
-	  					  case _ => 0.0
-	    		 }        	    
-	    res
-   	}
-    x(_)}
-  )
-  
-  val featuresCoetzee = (4, {def x(w1w2: (WordType,WordType)): Array[Double] = {
-    val (w1,w2) = w1w2
-    val res = Array.fill[Double](4)(0.0)
-    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
-    val w2first = PhonemeClassMap.getClass(w2(0))
-    res(0) = SymbolClassTable(w1prev) match {
-      case "CONS" => -1.0
-      case _ => 0.0
-    }
-    res(1) = -1.0 //this is a vector for predicting deletion...==> surface will have one less segment
-    res(2) = SymbolClassTable(w2first) match {
-      case "VOWL" => -1.0
-      case _ => 0.0
-    }
-    res(3) = SymbolClassTable(w2first) match {
-      case "SIL" => -1.0
-      case _ => 0.0
-    }    
-    res
-  } 
-  x(_)  
-  })
-  
-  val featuresPNIdent = (4, {def x(w1w2: (WordType,WordType)): Array[Double] = {
-	    val (w1,w2) = w1w2
-	    val res = Array.fill[Double](4)(0.0)
-	    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
-	    val w2first = PhonemeClassMap.getClass(w2(0))
-	    
-	    res(0) = 1.0
-	    res(1) = SymbolClassTable(w1prev) match {
-	  					  case "CONS" => 1.0
-	  					  case _ => 0.0
-	    		 }    
-	    res(2) = SymbolClassTable(w2first) match {
-	  					  case "CONS" => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res(3) = SymbolClassTable(w2first) match {
-	  					  case "SIL" => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res
-   	}
-    x(_)}
-  )
-  
-  /**
-    * coarse previous-next feature set 
-    * (prevVwl, prevCons, nextVwl, nextCons, nextPaus)
-    **/ 
-   val featuresPN = (5, {def x(w1w2: (WordType,WordType)): Array[Double] = {
-	    val (w1,w2) = w1w2
-	    val res = Array.fill[Double](5)(0.0)
-	    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
-	    val w2first = PhonemeClassMap.getClass(w2(0))
-	    
-	    res(0) = SymbolClassTable(w1prev) match {
-	  					  case "VOWL" => 1.0
-	  					  case _ => 0.0
-	    		 }
-	    res(1) = SymbolClassTable(w1prev) match {
-	  					  case "CONS" => 1.0
-	  					  case _ => 0.0
-	    		 }    
-	    res(2) = SymbolClassTable(w2first) match {
-	  					  case "VOWL" => 1.0
-	  					  case _ => 0.0
-	    		 }    
-	    res(3) = SymbolClassTable(w2first) match {
-	  					  case "CONS" => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res(4) = SymbolClassTable(w2first) match {
-	  					  case "SIL" => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res
-   	}
-    x(_)
-   }) 
-
-  /**
-    * coarse next feature set 
-    * (nextVwl, nextCons, nextPaus)
-    **/ 
-   val featuresN = (3, {def x(w1w2: (WordType,WordType)): Array[Double] = {
-	    val (w1,w2) = w1w2
-	    val res = Array.fill[Double](3)(0.0)
-	    val w2first = PhonemeClassMap.getClass(w2(0))
-	    res(0) = SymbolClassTable(w2first) match {
-	  					  case "VOWL" => 1.0
-	  					  case _ => 0.0
-	    		 }    
-	    res(1) = SymbolClassTable(w2first) match {
-	  					  case "CONS" => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res(2) = SymbolClassTable(w2first) match {
-	  					  case "SIL" => 1.0
-	  					  case _ => 0.0
-	    		 }        
-	    res
-   	}
-   x(_)
-  })
-}
 
 
-class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*", val DROP1: String = "T", val MISSING2: String="DROPD", val DROP2: String = "D", val nAndFeatures: (Int, ((WordType,WordType))=>Array[Double])=Data.featuresPN) {
+
+class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*", val DROP1: String = "T", val MISSING2: String="DROPD", val DROP2: String = "D", val nAndFeatures: (Int, ((WordType,WordType))=>Array[Double])=Features.featuresPN) {
 	val _random = new Random()
 	//Special Characters
 	val UBOUNDARYSYMBOL="UTTERANCEBOUNDARY"
@@ -370,13 +164,14 @@ class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*
 //	  println("Size relWords: "+relWords.size)
 	  val inputs =  relWords.toList.map(f => ((f._2._1,
 	  							  	   getUnderlyingNeighbourAt(f._1+f._2._2.length)))).toArray
-//      println("built inputs (size="+inputs.length+")")
+      println("built inputs (size="+inputs.length+")")
 	  if (inputs.length!=0) {
 		  val outputs = relWords.map(f => (if (f._2._1!=f._2._2) 1.0 else 0.0)).toArray
-//		  println("built outputs (size="+outputs.size+")")
+		  println("built outputs (size="+outputs.size+")")
 	      delModel1.setInputs(inputs)
+	      println("featurized inputs for training")
 	      delModel1.setOutputs(outputs)
-//		  println("optimize")
+		  println("optimize")
 		  delModel1.mapLBFGS()
 //	      delModel1.mapNewtonsMethod()
 //		  println("end update ("+delModel1.weights+")")	      
@@ -485,7 +280,7 @@ class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*
 	    del2s+=bPos
 	}
 	
-	def delModelProb: Double = delModel1.loglikelihood() 
+	def delModelProb: Double = if (phonVar) delModel1.loglikelihood() else 0 
 
 	
 	/**

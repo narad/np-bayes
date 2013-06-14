@@ -208,7 +208,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
 	  res.add((NoBoundary,NoRule),
 	      _noBoundary(context.leftU,context.w12U,context.w12O,context.rightU))	 
-	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP && !wordseg.wordseg.isAnnealing)    
+	  if (phonVar && !wordseg.wordseg.isAnnealing)    
 		  res.add((WBoundary,Del1),
 		      _boundary(context.leftU,context.w1D1,context.w2U,context.w1O,context.w2O,context.rightU))	    
 	  res.add((WBoundary,NoRule),
@@ -219,7 +219,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	
 	def _calcFinalHypotheses(context: FinalContext): Categorical[(Boundary,Rule)] = {
 	  val res: Categorical[(Boundary,Rule)] = new Categorical
-	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP && !wordseg.wordseg.isAnnealing)
+	  if (phonVar && !wordseg.wordseg.isAnnealing)
 		  res.add((UBoundary,Del1),
 		      _ubProb(context.leftU,context.w1D1,context.w1O))
 	  res.add((UBoundary,NoRule),
@@ -325,7 +325,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 		          Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 		        else
 		          0
-	      pypUni.logProbSeating(alpha)+logPrior
+	      pypUni.propLogProb(alpha)+logPrior
 	    }
         pypUni.concentration = wordseg.wordseg.hsample match {
         case "slice" | "sliceadd" | "slicecheck" => {
@@ -356,7 +356,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
       }
       }
             
-	  def resampleBiCoupled = {
+	  def resampleBi = {
 	      def logpdfBi(alpha: Double): Double = {
 	    	  if (alpha<0)
 	            return Double.NegativeInfinity
@@ -369,7 +369,7 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 		      var res: Double = 0
 		      val bCRPit = pypBis.values.iterator
 		      while (bCRPit.hasNext) {
-		        res += bCRPit.next().logProbSeating(alpha)
+		        res += bCRPit.next().propLogProb(alpha)
 		      }
 		      assert(res!=Double.NegativeInfinity)
 		      res + logPrior
@@ -401,9 +401,8 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	      }
 	      concentrationBi = newSharedBigramAlpha
       }
-		  
       resampleUni
-      resampleBiCoupled
+      resampleBi
 	}	  
 	
 
@@ -494,6 +493,12 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	override def logProb: Double = { 
 	  val lp1 = pypUni.base.logProb
 	  val lp2 = pypUni.logProbSeating
+	  val logprior = if (wordseg.wordseg.hyperparam!="no" && wordseg.wordseg.shape != -1) {
+		  Utils.lgammadistShapeRate(pypUni.concentration, wordseg.wordseg.shape, wordseg.wordseg.rate)+
+		  Utils.lgammadistShapeRate(concentrationBi, wordseg.wordseg.shape, wordseg.wordseg.rate)
+	    } else {
+		  0
+	    }
 	  var lp3 = 0.0
 	  val pypWIt = pypBis.values.iterator
 	  while (pypWIt.hasNext) {
@@ -504,14 +509,10 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	  }
 	  if (wordseg.DEBUG)
 		  println("lp1: "+lp1+"\nlp2: "+lp2+"\nlp3:" +lp3)
-	  lp1 + lp2 + lp3 + data.delModelProb + 
-	  { if (wordseg.wordseg.hyperparam!="no" && wordseg.wordseg.shape != -1) {
-		  Utils.lgammadistShapeRate(pypUni.concentration, wordseg.wordseg.shape, wordseg.wordseg.rate)+
-		  Utils.lgammadistShapeRate(concentrationBi, wordseg.wordseg.shape, wordseg.wordseg.rate)
-	    } else {
-		  0
-	    }
-	  }
+//	  System.err.println("lp1: "+(lp1+lp2+lp3)+" lp2: "+data.delModelProb)
+	  println("lp1: "+lp1+" lp2: "+lp2+" lp3:" +lp3+ " lprior: "+logprior)
+		  
+	  lp1 + lp2 + lp3 + data.delModelProb + logprior
 	}
 	
 	override def gibbsSweep(anneal: Double=1.0): Double = {
@@ -545,14 +546,14 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 
 	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP)
+	  if (phonVar)
 		  res.add((UBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, data.UBOUNDARYWORD)*toSurface(w1D, w1O,data.UBOUNDARYWORD))
 	  res.add((UBoundary,NoRule), predictive(leftU, w1O)*predictive(w1O, data.UBOUNDARYWORD))
 	  res
 	}
 	def __reseatProbs(leftU: WordType, w1D: WordType, w1O: WordType, w2U: WordType, w2O: WordType, rightU: WordType): Categorical[(Boundary,Rule)] = {
 	  val res = new Categorical[(Boundary,Rule)]
-	  if (wordseg.wordseg.dropInferenceMode!=IGNOREDROP)
+	  if (phonVar)
 	    res.add((WBoundary,Del1), predictive(leftU, w1D)*predictive(w1D, w2U)*toSurface(w1D, w1O,w2U)*
 			  				 predictive(w2U,rightU)*toSurface(w2U,w2O,rightU))
 	  res.add((WBoundary,NoRule), predictive(leftU, w1O)*predictive(w1O, w2U)*toSurface(w1O, w1O,w2U)*
@@ -564,8 +565,8 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	 * only resample words, but determine drops
 	 */
 	override def gibbsSweepWords(anneal: Double=1.0): Double = {
-//   for (i: Int <- shuffle(1 until data.nBoundaries)) {
-	  for (i: Int <- 1 until data.nBoundaries) {
+      for (i: Int <- shuffle(1 to data.nBoundaries)) {
+	  //for (i: Int <- 1 until data.nBoundaries) {
 	  	  resampleWords(i,anneal)
 	  }
 	  if (phonVar) wordseg.wordseg.loglearn match {

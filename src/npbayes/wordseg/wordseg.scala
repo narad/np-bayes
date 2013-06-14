@@ -13,7 +13,6 @@ import npbayes.wordseg.lexgens.MonkeyUnigram
 import npbayes.wordseg.data._
 import com.sun.org.apache.xerces.internal.util.SymbolTable
 import npbayes.wordseg.lexgens.MonkeyBigram
-import npbayes.wordseg.lexgens.MonkeyBigram
 import npbayes.wordseg.lexgens.UnigramLearned
 import npbayes.wordseg.lexgens.BigramLearned
 import scala.collection.mutable.LinkedList
@@ -22,6 +21,7 @@ import java.io.PrintStream
 import npbayes.distributions.MAXPROB
 import npbayes.maxent.LogisticRegression
 import breeze.linalg.DenseVector
+import npbayes.WordType
 
 abstract class LexGenerator
 case object UNIUNLEARNED extends LexGenerator
@@ -105,9 +105,13 @@ object wordseg {
     var hsmhvar: Double = 0.1
     var binitProb: Double = 0.0
     var loglearn: String = "optimize"
-    var features = Data.featuresN
+    var features: (Int, ((WordType,WordType))=>Array[Double]) = null
 	def main(args: Array[String]) {
 	  val options = new TaggerParams(args)
+	  	if (options.PHONMAP!="") {
+	  //PhonemeClassMap.init(options.PHONMAP)
+	  PhonemeFeatureMap.init(options.PHONMAP)
+	}
 	  val assumption = options.ASSUMPTION match {
 	    case "EXACT" =>
 	      EXACT
@@ -122,20 +126,20 @@ object wordseg {
 	  }
 	  loglearn = options.LOGLEARN
 	features = options.FEATURES match {
-	  case "no" => Data.featuresNo
-	  case "right" => Data.featuresN
-	  case "leftright" => Data.featuresPN
-	  case "leftrightident" => Data.featuresPNIdent
-	  case "interaction" => Data.featuresInteraction
-	  case "bigset" => Data.featuresPNInteraction
-	  case "coetzee" => Data.featuresCoetzee
+	  case "no" => Features.featuresNo
+	  case "right" => Features.featuresN
+	  case "leftright" => Features.featuresPN
+	  case "leftrightident" => Features.featuresPNIdent
+	  case "interaction" => Features.featuresInteraction
+	  case "bigset" => Features.featuresPNInteraction
+	  case "coetzee" => Features.featuresCoetzee
+	  case "large" => Features.featuresLarge
+	  case "largeNext" => Features.featuresLargeNext
 	}
 	hsampleiters = options.HSAMPLEITERS
 	hsample = options.HSAMPLE
 	hsmhvar = options.HSMHSSD
-	if (options.PHONMAP!="") {
-	  PhonemeClassMap.init(options.PHONMAP)
-	}
+
 	binitProb = options.BOUNDINITPROB
 	
 	  
@@ -219,7 +223,7 @@ object wordseg {
 	    val temperature: Double = annealTemperature(i)
 	    isAnnealing = temperature!=1.0
 	    sample(1/temperature)
-	    if (i>4) hyperparam match {
+	    if (i>4 && i % 1 == 0) hyperparam match {
 	      case "no" =>
 	      case "sample" => model.resampleConcentration({if (i<options.HSLOWITERS) 1 else options.HSAMPLEITERS})
 	      case "optimize" => model.optimizeConcentration
@@ -229,7 +233,7 @@ object wordseg {
 	    		{ if (phonVar)
 	    			prettyString(model.data.delModel1.weights)
 	    		  else "" } +
-	    	  " " + model.hyperParam + {if (options.NGRAM=="1") " "+model.uniTables else ""}
+	    	  " " + model.hyperParam + {if (options.NGRAM=="1") " "+model.uniTables + " " + model.uniCustomers else ""}
 	    println(log); traceFile.println(log)
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {
 	      model.writeAnalysis(sampleFile)

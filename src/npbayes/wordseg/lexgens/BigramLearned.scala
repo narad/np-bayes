@@ -13,9 +13,15 @@ import npbayes.wordseg.data.PhonemeClassMap
 
 /**
  * we assume a uniform dirichlet prior, with minor simplifications in the implementation
- * in particular, we don't renormalize the distribution as to adjust for "empty" words
- * and the fact that the WB can only occur at the end of a word
- * also, we won't consider word-internal changes to predictive probability
+ * in particular, we don't consider word-internal changes to predictive probability
+ * 
+ * this corresponds to a grammar of the form
+ * Word --> Segs     [1.0]
+ * Segs --> Seg      [a]
+ * Segs --> Segs Seg [1-a]
+ * 
+ * with _predWB giving the probability a of using the terminating rule which is learned
+ * assuming a symmetric 1,1-Beta prior.
  * 
  * the vowel-constraint just takes away mass, but the renormalization is done trivially if required
  */
@@ -90,7 +96,7 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
 	      if (isVowel(obs(i)))
 	        hasVowel = true
 	      p = p*_predPhon(obs(i))
-	      if (hasVowel) {
+	      if (hasVowel || !vowelConstraint) {
 	        p = p * (1-_predWB)
 	        branchCount+=1
 	      }
@@ -119,7 +125,7 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
         var j = 0
         var foundV = false
         while (j<obs.size && !foundV) {
-          if (isVowel(obs(j)))
+          if (vowelConstraint && isVowel(obs(j)))
             foundV=true
           else
             j+=1
@@ -133,7 +139,7 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
 	    while (i>=0) {
 	      _removePhon(obs(i))
 	      p*=_predPhon(obs(i))
-	      if (i>=j) {
+	      if (i>=j || !vowelConstraint) {
 	        branchCount-=1
 	        p*=(1-_predWB)
 	      }
