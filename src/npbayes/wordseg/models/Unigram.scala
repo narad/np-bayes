@@ -158,7 +158,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
       
       def logpdf(alpha: Double): Double = {
 	      var result = 0
-	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      val logPrior = Utils.lgammadistShapeScale(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	      pypUni.propLogProb(alpha)+logPrior
 	    }
       val alpha0 = wordseg.wordseg.hsample match {
@@ -185,7 +185,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
    override def optimizeConcentration = {
       def logpdf(alpha: Double): Double = {
 	      var result = 0
-	      val logPrior = Utils.lgammadistShapeRate(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      val logPrior = Utils.lgammadistShapeScale(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	      pypUni.propLogProb(alpha)+logPrior
 	    }
       def logpdfV(alpha: DenseVector[Double]): Double = logpdf(alpha.data(0))
@@ -413,12 +413,12 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	  val lp1 = pypUni.logProb
 	  val lp2 = if (phonVar) data.delModelProb else 0
 	  val lp3 = if (wordseg.wordseg.hyperparam!="no")
-	      Utils.lgammadistShapeRate(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      Utils.lgammadistShapeScale(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
 	    else
 	      0 
 	  if (npbayes.wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
-	  System.err.println("lp1: "+ lp1 + " lp2: "+ lp2+ " boundaries: "+ lpBoundaries)		  
+	  System.err.println("lp1: "+ lp1 + " lp2: "+ lp2+ " lp3: "+lp3+" boundaries: "+ lpBoundaries)		  
 	  lp1 + lp2 + lp3+lpBoundaries
 	} 
 	

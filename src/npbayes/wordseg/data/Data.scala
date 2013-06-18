@@ -440,7 +440,6 @@ class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*
 		          trueBoundaries+=1
 		          trueTokens+=1
 		          trueStartPos=i
-		          trueDrops+=1          
 		        case _ =>
 		      }
 		    }

@@ -157,7 +157,7 @@ object Features {
     * coarse previous-next feature set 
     * (prevVwl, prevCons, nextVwl, nextCons, nextPaus)
     **/ 
-   val featuresPN = (5, {def x(w1w2: (WordType,WordType)): Array[Double] = {
+   val featuresPNold = (5, {def x(w1w2: (WordType,WordType)): Array[Double] = {
 	    val (w1,w2) = w1w2
 	    val res = Array.fill[Double](5)(0.0)
 	    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
@@ -187,6 +187,42 @@ object Features {
    	}
     x(_)
    }) 
+
+   val featuresPN = (5, {def x(w1w2: (WordType,WordType)): Array[Double] = {
+	    val (w1,w2) = w1w2
+	    val res = Array.fill[Double](5)(0.0)
+	    val w1prev = PhonemeFeatureMap(w1(w1.size-2))
+	    val w2first = PhonemeFeatureMap(w2(0))
+	    
+	    val cons = PhonemeFeatureMap.fmapStoN("cons")
+	    val syll = PhonemeFeatureMap.fmapStoN("syll")
+	    val sil = PhonemeFeatureMap.fmapStoN("sile")
+	    
+	    
+	    res(0) = w1prev(syll) match {
+	  					  case true => 1.0
+	  					  case _ => 0.0
+	    		 }
+	    res(1) = w1prev(cons) match {
+	  					  case true => 1.0
+	  					  case _ => 0.0
+	    		 }    
+	    res(2) = w2first(syll) match {
+	  					  case true => 1.0
+	  					  case _ => 0.0
+	    		 }    
+	    res(3) = w2first(cons) match {
+	  					  case true => 1.0
+	  					  case _ => 0.0
+	    		 }        
+	    res(4) = w2first(sil) match {
+	  					  case true => 1.0
+	  					  case _ => 0.0
+	    		 }        
+	    res
+   	}
+    x(_)
+   })    
 
    val featuresLarge = ({def n() = {4*PhonemeFeatureMap.nFeatures+2} 
    						 n},  

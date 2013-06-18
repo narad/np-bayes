@@ -109,7 +109,7 @@ object Utils {
 	// these instead (taken from Mark Johnson's Adaptor Grammar implementation)
 	/**
 	 * this is the characterization in terms of shape and scale
-	 * p(x|a,b) = x**(shape-1) * scale**(-shape) * * exp(-x/scale) * Gamma(shape)**-1 
+	 * p(x|a,b) = x**(shape-1) * scale**(-shape) *  exp(-x/scale) * Gamma(shape)**-1 
 	 */
 	def lgammadistShapeScale (x: Double, shape: Double, scale: Double): Double =
 		(shape-1)*math.log(x) - shape*math.log(scale) - x/scale - org.apache.commons.math3.special.Gamma.logGamma(shape);
