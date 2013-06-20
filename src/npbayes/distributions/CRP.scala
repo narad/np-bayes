@@ -360,7 +360,7 @@ class CRP[T](var concentration: Double, var discount: Double, val base: Posterio
    */
   def remove (obs: T) = {
     val counts = labelTabels.get(obs)
-    val r = if (assumption==MAXPROB) 0 else (_random.nextDouble*counts.nCust).toInt
+    val r = _random.nextInt(counts.nCust)+1
     _oCount-=1
 //    val remCusts = labelTabels(obs).remove(r)
     val remCusts = counts.remove(r)

@@ -159,7 +159,8 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
       def logpdf(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeScale(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
-	      pypUni.propLogProb(alpha)+logPrior
+	      //pypUni.propLogProb(alpha)+logPrior
+	      pypUni._logProbSeatingByConc(alpha)+logPrior
 	    }
       val alpha0 = wordseg.wordseg.hsample match {
         case "slice" | "sliceadd" | "slicecheck" =>
