@@ -239,7 +239,7 @@ object wordseg {
 	      case "sample" => model.resampleConcentration({if (i<options.HSLOWITERS) 1 else options.HSAMPLEITERS})
 	      case "optimize" => model.optimizeConcentration
 	    }
-	    
+	     
 	    val log = i+" "+ //iteration
 	    		  temperature+" "+ //temperature
 	    		  model.logProb+" "+//total logprob
