@@ -8,7 +8,7 @@ import com.google.common.collect.HashBiMap
 /**
  * Maps a SegmentType to a PhonemeClass identifier
  */
-object PhonemeClassMap {
+object PhonemeClassMap { 
 	val pmap: HashMap[SegmentType,Int] = new HashMap
 	var isInit: Boolean = false
 	
