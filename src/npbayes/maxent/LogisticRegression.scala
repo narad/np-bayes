@@ -52,16 +52,17 @@ object LogisticRegression {
     /**
      * a Gaussian prior with 0 mean, this is the loglikelihood
      */
-    def l2prior(w: DenseVector[Double],variance: Double = 1.0): Double = {
-      val norm = -math.log((2*math.Pi*math.pow(variance,w.size)))
-      norm - (w map (math.pow(_,2)/(2*variance))).sum
+    def l2prior(strength: Double)(w: DenseVector[Double]): Double = {
+      //val norm = -math.log((2*math.Pi*math.pow(variance,w.size)))
+      //norm - (w map (math.pow(_,2)/(2*variance))).sum
+      - strength*(w map (math.pow(_,2))).sum
     }
     
     /**
      * this is the derivative of the log-likelihood of the Gaussian prior
      */
-    def l2derivative(w: DenseVector[Double],variance: Double=1.0): DenseVector[Double] = {
-      - w / variance
+    def l2derivative(strength:Double)(w: DenseVector[Double]): DenseVector[Double] = {
+      - w*strength 
     }
     
     /**
@@ -100,7 +101,7 @@ object LogisticRegression {
 /**
  * binary logistic regression
  */
-class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Double],val logprior: (DenseVector[Double],Double)=>Double=LogisticRegression.l2prior, val priorderiv: (DenseVector[Double],Double)=>DenseVector[Double]=LogisticRegression.l2derivative)  {
+class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Double],val logprior: (DenseVector[Double])=>Double=LogisticRegression.l2prior(1), val priorderiv: (DenseVector[Double])=>DenseVector[Double]=LogisticRegression.l2derivative(1))  {
   
   def sigmoid(x: Double) = 1/(1+math.exp(-x))
   def sigmoidprime(x: Double) = sigmoid(x)*(1-sigmoid(x))
@@ -137,7 +138,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
   /**
    * perform MAP-inference using LBFGS
    */
-  def mapLBFGS(start: DenseVector[Double]=weights,maxIters:Int=100,m: Int=3) = {
+  def mapLBFGS(start: DenseVector[Double]=weights,maxIters:Int=1000,m: Int=8) = {
     val lbfgs = new breeze.optimize.LBFGS[DenseVector[Double]](maxIters,m)
     weights = lbfgs.minimize(gradient, start)
   }
@@ -218,7 +219,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
         weights = newW        
         oldL = newL
         g = gradient.gradientAt(weights)
-        g = g / g.norm(2.0)
+        //g = g / g.norm(2.0)
       }
       iters+=1      
     }
@@ -262,7 +263,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
         val nll = -loglikelihood(x)
         val mu_y = (inputs * x).map(sigmoid(_)) - outputs
         val res = inputstranspose*mu_y
-        (nll,res+priorderiv(x,1.0))
+        (nll,res+priorderiv(x))
       }    
   }
 
@@ -272,7 +273,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
         val nll = -loglikelihood(x)
         val mu_y = (inputs * x).map(sigmoid(_)) - outputs
         val res = inputstranspose*mu_y
-        (nll+logprior(weights,1.0),res)
+        (nll+logprior(weights),res)
       }
   }
   
@@ -305,7 +306,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
       i+=1
     }
     // with l2-regularizer
-    H + breeze.linalg.DenseMatrix.eye[Double](dim)
+    H + breeze.linalg.DenseMatrix.eye[Double](dim) //*1000.0
   }
   
   /**
@@ -335,7 +336,8 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
 	      res = res + outputs(i)*mu - math.log(1+math.exp(mu))
 	      i+=1
 	    }
-	    res + logprior(w,1.0)
+	    val lp = logprior(w)
+	    res + lp
     }
   }
   

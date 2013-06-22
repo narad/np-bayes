@@ -23,6 +23,7 @@ import org.apache.commons.math3.analysis.UnivariateFunction
 import org.apache.commons.math3.optimization.univariate.BrentOptimizer
 import breeze.optimize.LBFGS
 import breeze.linalg.DenseVector
+import npbayes.wordseg.UNIFORM
 
 
 
@@ -48,22 +49,26 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	require(0<=discount && discount<1)
 	require(if (discount==0) concentration>0 else concentration>=0)
 	val betaUB = 2.0 
-	val data = new Data(corpusName,phonVar,dropInd,dropSeg,"0","0",features)
+	val data = new Data(corpusName,phonVar,dropInd,dropSeg,"DROP2","DROPIND2",features)
 	//nSymbols-2 because of the "$" and the drop-indicator symbol
 	//val pypUni = new CRP[WordType](concentration,discount,new MonkeyUnigram(SymbolTable.nSymbols-2,0.5),assumption)
 	val pypUni = {
 	  val tlexgen = lexgen match {
+	    case UNIFORM =>
+	      new MonkeyUniform(npbayes.wordseg.data.SymbolSegTable.nSymbols-3,0.5)
 	    case UNIUNLEARNED =>
-	    	new MonkeyUnigram(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,0.5)
+	    	new MonkeyUnigram(npbayes.wordseg.data.SymbolSegTable.nSymbols-3,0.5)
 	    case UNILEARNED =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,1.0,false)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-3,1.0,false)
 	    case UNILEARNEDVOWELS =>
-	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-2,1.0,true)
+	       new UnigramLearned(npbayes.wordseg.data.SymbolSegTable.nSymbols-3,1.0,true)
 	    case _ =>
 	      throw new Error("invalid value for lexgen: "+lexgen)
 	  }
 	  new CRP[WordType](concentration,discount,tlexgen,assumption)	
 	}
+	
+
 	
 	val unif = new Random
 	
@@ -159,8 +164,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
       def logpdf(alpha: Double): Double = {
 	      var result = 0
 	      val logPrior = Utils.lgammadistShapeScale(alpha,wordseg.wordseg.shape,wordseg.wordseg.rate)
-	      //pypUni.propLogProb(alpha)+logPrior
-	      pypUni._logProbSeatingByConc(alpha)+logPrior
+	      pypUni.propLogProb(alpha)+logPrior
 	    }
       val alpha0 = wordseg.wordseg.hsample match {
         case "slice" | "sliceadd" | "slicecheck" =>
@@ -394,7 +398,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	
 	override def gibbsSweepWords(anneal: Double=1.0): Double = {
 //	  println("deletionpoints: "+data.del1s+" words: "+data.words)
-	  for (i: Int <- shuffle(1 to data.uboundaries.last)) {
+	  for (i: Int <- shuffle(1 to data.nBoundaries)) {
 		  resampleWords(i,anneal)
 	  }
 	  if (phonVar) 
@@ -405,13 +409,21 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	  logProb
 	}
 	
-	   
+	def logProbAdaptors = pypUni.logProbSeating
+	
+	def logProbGenerator = pypUni.base.logProb
+	
+	def logProbPrior = if (wordseg.wordseg.hyperparam!="no")
+	      					Utils.lgammadistShapeScale(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
+	      				else
+	      					0  
 	
 	override def logProb: Double = {
 	  val nonFinal = nTokens - nUtterances
 	  val lpBoundaries = Gamma.logGamma(nonFinal+betaUB/2.0)+Gamma.logGamma(nUtterances+betaUB/2.0)+Gamma.logGamma(betaUB)-
 	  						2*Gamma.logGamma(betaUB/2.0)-Gamma.logGamma(nTokens+betaUB)
-	  val lp1 = pypUni.logProb
+	  val lp1a = pypUni.logProbSeating
+	  val lp1b = pypUni.base.logProb
 	  val lp2 = if (phonVar) data.delModelProb else 0
 	  val lp3 = if (wordseg.wordseg.hyperparam!="no")
 	      Utils.lgammadistShapeScale(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)
@@ -419,10 +431,11 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	      0 
 	  if (npbayes.wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
-	  System.err.println("lp1: "+ lp1 + " lp2: "+ lp2+ " lp3: "+lp3+" boundaries: "+ lpBoundaries)		  
-	  lp1 + lp2 + lp3+lpBoundaries
+	  System.err.println("lp1a: "+ lp1a + " lp1b: "+lp1b+ " lp2: "+ lp2+ " lp3: "+lp3+" boundaries: "+ lpBoundaries)		  
+	  lp1a+lp1b + lp2 + lp3+lpBoundaries
+	  //lp1a+lp3
 	} 
 	
-	def uniTables: Int = pypUni._tCount
+	def totalTables: Int = pypUni._tCount
 
 }

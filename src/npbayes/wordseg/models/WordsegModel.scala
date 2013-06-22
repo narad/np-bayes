@@ -10,7 +10,14 @@ abstract class WordsegModel {
 	def uniCustomers = 0
 	def sanity: Boolean = false
 	def init(gold:Boolean = false, goldType:Double=0.5) = {}
-	def logProb: Double = 0.0
+	def logProb: Double 
+	
+	def logProbAdaptors: Double
+	
+	def logProbGenerator: Double
+	
+	def logProbPrior: Double
+	
 	def gibbsSweep(anneal: Double=1.0): Double = 0.0
 	def evaluate: String = data.evaluate.toString
 	var _logProbTrack: Double = 0 // explicit logProb tracking
@@ -23,7 +30,7 @@ abstract class WordsegModel {
 	
 	def optimizeConcentration: Unit = {}
 	
-	def uniTables: Int
+	def totalTables: Int
 	
 	def hyperParam: String = ""
 	

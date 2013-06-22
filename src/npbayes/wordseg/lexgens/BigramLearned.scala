@@ -54,10 +54,10 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
 	    var p = 1.0
 	    val continue = (1-_predWB)
 	    for (seg <- obs) {
-	      if (isVowel(seg))
+	      if (!vowelConstraint || isVowel(seg))
 	        hasVowel = true
 	      p = p*_predPhon(seg)
-	      if (hasVowel)
+	      if (!vowelConstraint || hasVowel)
 	        p = p*continue
 	    }
 	    val res = (1-pUB)*p*((1-continue)/continue)
@@ -93,7 +93,7 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
 	    var hasVowel = false
 	    var i = 0
 	    while (i<obs.size-1) {
-	      if (isVowel(obs(i)))
+	      if (!vowelConstraint || isVowel(obs(i)))
 	        hasVowel = true
 	      p = p*_predPhon(obs(i))
 	      if (hasVowel || !vowelConstraint) {
@@ -103,7 +103,7 @@ class BigramLearned(val nSegments: Int, val UB: WordType, val pUB: Double=0.5, v
 	      _addPhon(obs(i))
 	      i+=1
 	    }
-	    if (isVowel(obs(i)))
+	    if (!vowelConstraint || isVowel(obs(i)))
 	      hasVowel=true
 	    val res = (1-pUB)*p*_predPhon(obs(i))*_predWB
 	    _addPhon(obs(i))

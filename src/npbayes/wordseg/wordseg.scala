@@ -24,6 +24,7 @@ import breeze.linalg.DenseVector
 import npbayes.WordType
 
 abstract class LexGenerator
+case object UNIFORM extends LexGenerator
 case object UNIUNLEARNED extends LexGenerator
 case object UNILEARNED extends LexGenerator
 case object UNILEARNEDVOWELS extends LexGenerator
@@ -60,14 +61,14 @@ class TaggerParams(args: Array[String]) extends ArgParser(args) {
 	def ALPHA1 = getDouble("--alpha1", 3000); params += (("alpha1",ALPHA1))
 	def PSTOP = getDouble("--pstop", 0.5); params += (("pstop",PSTOP))	//monkey-model stop-probability
 	def LEXGEN = getString("--lexgen","monkey"); params += (("lexgen",LEXGEN)) //monkey, learned, vowel
-	def PHONMAP = getString("--phonmap",""); params += (("vowels",PHONMAP))
+	def PHONMAP = getString("--phonmap",""); params += (("phonmap",PHONMAP))
 	def ITERS = getInt("--iters",1000); params += (("iters",ITERS))
 	def ANNEALITERS = getInt("--annealIters",1000); params += (("annealIters",ANNEALITERS))
 	def STARTTEMP = getDouble("--startTemp",1); params += (("startTemp",STARTTEMP))
 	def STOPTEMP = getDouble("--stopTemp",1); params += (("stopTemp",STOPTEMP))
 	def PHONVAR = getBoolean("--phonVar",false); params += (("phonVar",PHONVAR)) //if set to -1, do inference, if set to 0.0, ignore
-	def DROPSEG = getString("--dropSeg","NONE"); params += (("dropSeg",DROPSEG)) //what is the dropSegment (segment that actually occurs)
-	def DROPIND = getString("--dropInd","NONE"); params += (("dropInd",DROPIND)) //what is the indicator (for evaluation)
+	def DROPSEG = getString("--dropSeg","NONESEG1"); params += (("dropSeg",DROPSEG)) //what is the dropSegment (segment that actually occurs)
+	def DROPIND = getString("--dropInd","NONEIND1"); params += (("dropInd",DROPIND)) //what is the indicator (for evaluation)
 	def INPUT = getString("--input",""); params += (("input",INPUT))
 	def OUTPUT = getString("--output",""); params += (("output",OUTPUT))
 	def TRACE = getString("--trace",""); params += (("trace",TRACE))
@@ -133,7 +134,7 @@ object wordseg {
 	  case "interaction" => Features.featuresInteraction
 	  case "bigset" => Features.featuresPNInteraction
 	  case "coetzee" => Features.featuresCoetzee
-	  case "large" => Features.featuresLarge
+	  case "large" => Features.featuresLarge2
 	  case "largeNext" => Features.featuresLargeNext
 	}
 	hsampleiters = options.HSAMPLEITERS
@@ -150,6 +151,8 @@ object wordseg {
 //	  data = new VarData(options.INPUT,options.DROPPROB,options.DROPIND,options.DROPSEG,contextModel)
 	  
 	  val lexgen: LexGenerator = options.LEXGEN match {
+	  	case "uniform" =>
+	  		UNIFORM
 	    case "monkey" =>
 	    	options.NGRAM match {
 	    	  case "1" =>
@@ -200,24 +203,32 @@ object wordseg {
 	    }
 	    res.mkString(" ")
 	  }
-	  
+	  val weightFile: PrintStream = if (phonVar)
+	    new java.io.PrintStream(new java.io.File(options.OUTPUT+".weights"),"utf-8")
+	  else
+	    null
 	  val traceFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".trace"),"utf-8")
+	  val evalFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".eval"),"utf-8")
 	  val sampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".samples"),"utf-8")
 	  hyperSampleFile = new java.io.PrintStream(new java.io.File(options.OUTPUT+".hypersamples"),"utf-8")
 	  println(options)
 	  traceFile.println(options)
 	  model.init(options.GOLDINIT,options.BOUNDINITPROB)
-	  
-	  println(0+" "+1+" "+model.logProb+" "+model._logProbTrack+" "+model.evaluate +   	{if (dropInferenceMode==IGNOREDROP)
-	    	  " -1"
-	    	else " "}
-//	    	  " " + model.data.showDropProbs} +
-	    	  + " " + model.hyperParam+ {if (options.NGRAM=="1") " "+model.uniTables else ""})
-	  traceFile.println(0+" "+1+" "+model.logProb+" "+model._logProbTrack+" "+model.evaluate +   	{if (dropInferenceMode==IGNOREDROP)
-	    	  " -1"
-	    	else
-	    	  " "} // + model.data.showDropProbs} +
-	    	  + " " + model.hyperParam + {if (options.NGRAM=="1") " "+model.uniTables else ""})
+
+	   val log = "0 "+ //iteration
+	    		  options.STARTTEMP+" "+ //temperature
+	    		  model.logProb+" "+//total logprob
+	    		  model.logProbAdaptors+" "+//Adaptor logprobs
+	    		  model.logProbGenerator+" "+//Generator logprobs
+	    		  model.logProbPrior+ " "+//prior logprob
+	    		  {if (phonVar) model.data.delModel1.loglikelihood()+" " else ""}+ //deletionmodel	    		  
+	    		  model.totalTables+ " "+//total number of tables
+	    		  model.hyperParam //hyper-parameters
+
+	    		 
+	  println(log); traceFile.println(log)
+	  if (phonVar)
+	    weightFile.println(Features.featureLargeName2.mkString(" "))
 	    	  
 	  for (i <- 1 to options.ITERS) {
 	    val temperature: Double = annealTemperature(i)
@@ -229,12 +240,22 @@ object wordseg {
 	      case "optimize" => model.optimizeConcentration
 	    }
 	    
-	    val log = i+" "+temperature+" "+model.logProb+" "+" "+model._logProbTrack+" "+model.evaluate+
+	    val log = i+" "+ //iteration
+	    		  temperature+" "+ //temperature
+	    		  model.logProb+" "+//total logprob
+	    		  model.logProbAdaptors+" "+//Adaptor logprobs
+	    		  model.logProbGenerator+" "+//Generator logprobs
+	    		  model.logProbPrior+ " "+//prior logprob
+	    		  {if (phonVar) model.data.delModel1.loglikelihood()+" " else ""}+ //deletionmodel
+	    		  model.totalTables+ " "+//total number of tables
+	    		  model.hyperParam //hyper-parameters
+/*	    		  " "+model.evaluate+
 	    		{ if (phonVar)
 	    			prettyString(model.data.delModel1.weights)
 	    		  else "" } +
-	    	  " " + model.hyperParam + {if (options.NGRAM=="1") " "+model.uniTables + " " + model.uniCustomers else ""}
-	    println(log); traceFile.println(log)
+	    	  " " + model.hyperParam + {if (options.NGRAM=="1") " "+model.uniTables + " " + model.uniCustomers else ""}*/
+	    println(log); traceFile.println(log); evalFile.println(i+" "+model.evaluate)
+	    if (phonVar) weightFile.println(prettyString(model.data.delModel1.weights))
 	    if (i>=options.BURNIN && i%options.SAMPLES==0) {
 	      model.writeAnalysis(sampleFile)
 	      sampleFile.println()

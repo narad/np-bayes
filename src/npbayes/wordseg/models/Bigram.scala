@@ -490,6 +490,29 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	  lp1 + lp2 + lp3 + lp4+ {if (phonVar) data.delModelProb else 0}
 	}
 	
+	
+	def logProbAdaptors = {
+	  val lpUni = pypUni.logProbSeating
+	  var lpBis = 0.0
+	  val pypWIt = pypBis.values.iterator
+	  while (pypWIt.hasNext) {
+	    val pypW = pypWIt.next()
+	    if (wordseg.DEBUG)
+	    	assert(pypW.sanityCheck)
+	    lpBis += pypW.logProbSeating
+	  }
+	  lpUni+lpBis	  
+	}
+	
+	def logProbPrior = if (wordseg.wordseg.hyperparam!="no") {
+	     					Utils.lgammadistShapeScale(pypUni.concentration,wordseg.wordseg.shape,wordseg.wordseg.rate)+
+	     					Utils.lgammadistShapeScale(concentrationBi,wordseg.wordseg.shape,wordseg.wordseg.rate) 					
+						}
+	     				else
+	      					0
+	
+	def logProbGenerator = pypUni.base.logProb
+	
 	override def logProb: Double = { 
 	  val lp1 = pypUni.base.logProb
 	  val lp2 = pypUni.logProbSeating
@@ -577,5 +600,12 @@ class Bigram(val corpusName: String,val features: (Int,((WordType,WordType))=>Ar
 	  logProb
 	}
 	
-	def uniTables = pypUni._tCount
+	def totalTables = pypUni._tCount + {
+	  var res = 0
+	  val it = pypBis.values().iterator()
+	  while (it.hasNext()) {
+	    res += it.next()._tCount
+	  }
+	  res
+	}
 }

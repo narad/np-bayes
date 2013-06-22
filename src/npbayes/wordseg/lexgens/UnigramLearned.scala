@@ -53,7 +53,7 @@ class UnigramLearned(val nSegments: Int, val pseudoCount: Double = 0.01, val vow
       if (vowelConstraint && isVowel(seg))
         hasVowel = true
       p = p*_predPhon(seg)
-      if (hasVowel)
+      if (!vowelConstraint || hasVowel)
         p = p*continue
     }
     val res = p*((1-continue)/continue)
