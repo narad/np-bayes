@@ -17,7 +17,7 @@ object Features {
   
   val featuresPNInteraction = (11, {def x(w1w2: (WordType,WordType)): Array[Double] = {
 	    val (w1,w2) = w1w2
-	    val res = Array.fill[Double](11)(0.0)
+	    val res = Array.fill[Double](11)(0.0) 
 	    val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
 	    val w2first = PhonemeClassMap.getClass(w2(0))
 	    val interaction = (SymbolClassTable(w1prev),SymbolClassTable(w2first))
@@ -70,6 +70,39 @@ object Features {
    	}
     x(_)}
   )
+  val featureManualName = {
+      val res = new ArrayBuffer[String]
+      res.+=("Intercept")
+      res.+=("[+cons]_")
+      res.+=("[+syll]_")
+      res.+=("[+nas]_")
+//      res.+=("featDiff(_t)")
+      res.+=("_[+cons]")
+      res.+=("_[+syll]")
+      res.+=("_[+sile]")
+      res.+=("_[+son]")
+//      res.+=("featDiff(t_)")
+    }
+    val featuresManual = (8, {def x(w1w2: (WordType,WordType)): Array[Double] = {
+	    	val (w1,w2) = w1w2
+		    val res = Array.fill[Double](8)(0.0)
+		    val w1last = PhonemeFeatureMap(w1.lastSeg)
+		    val w1prev = PhonemeFeatureMap(w1(w1.size-2))
+		    val w2first = PhonemeFeatureMap(w2(0))	    
+		    res(0) = 1.0 //intercept
+		    res(1) = PhonemeFeatureMap.hasFeature(w1prev, "cons")
+		    res(2) = PhonemeFeatureMap.hasFeature(w1prev, "syll")
+		    res(3) = PhonemeFeatureMap.hasFeature(w1prev, "nas")
+//		    res(4) = featureDifference(w1last,w1prev)
+		    res(4) = PhonemeFeatureMap.hasFeature(w2first,"cons")
+		    res(5) = PhonemeFeatureMap.hasFeature(w2first,"syll")
+		    res(6) = PhonemeFeatureMap.hasFeature(w2first,"sile")
+		    res(7) = PhonemeFeatureMap.hasFeature(w2first,"son")
+//		    res(9) = featureDifference(w1last,w2first) 
+		    res
+    	}
+    	x(_)
+    })
   
     val featuresInteraction = (6, {def x(w1w2: (WordType,WordType)): Array[Double] = {
 	    val (w1,w2) = w1w2
@@ -114,7 +147,7 @@ object Features {
     val (w1,w2) = w1w2
     val res = Array.fill[Double](4)(0.0)
     val w1prev = PhonemeClassMap.getClass(w1(w1.size-2))
-    val w2first = PhonemeClassMap.getClass(w2(0))
+    val w2first = PhonemeClassMap.getClass(w2(0)) 
     res(0) = SymbolClassTable(w1prev) match {
       case "CONS" => -1.0
       case _ => 0.0

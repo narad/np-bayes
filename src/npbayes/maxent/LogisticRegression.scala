@@ -6,6 +6,7 @@ import breeze.linalg.DenseVector
 import breeze.linalg.DenseMatrix
 import scala.util.Random.nextDouble
 import breeze.linalg.Matrix
+import scala.util.Random
 
 trait FeatureVector[T] {
   def features(x: T)
@@ -30,7 +31,7 @@ object LogisticRegression {
     	}
       res
     }  
-  
+    
     /**
      * turn an Array of Arrays into a Breeze Matrix
      */
@@ -134,13 +135,60 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
     sigmoid(w dot new DenseVector[Double](in))
   }
  
+  def clipSum(x1: DenseVector[Double],x2: DenseVector[Double]): DenseVector[Double] = {
+    assert(x1.size==x2.size)
+    val res = new Array[Double](x1.size)
+    var i = 0
+    while (i<x1.size) {
+      res(i) = {if (x1(i)<0) math.min(0,x1(i)+x2(i)) else math.max(0,x1(i)+x2(i))} 
+      i+=1
+    }
+    new DenseVector[Double](res)
+  }
+  
+  /**
+   * with clipping, as described in Bob Carpenter's notes
+   */
+  def stochasticDescent(iters: Int=500,threshold: Double = 1e-4) = {
+    var j = 1
+
+    val n: Double = outputs.size
+    var oldLL = loglikelihood()
+    println("Logprob at start: "+oldLL)
+    var notConverged = true
+    while (j<=iters && notConverged) {
+        val stepSize = 1.0/(j+1)
+        val order = Random.shuffle(0 to outputs.size-1)
+        var i = 0        
+	    while (i < n) {
+	      val xi = inputstranspose(::,order(i))
+		  val mu = sigmoid(weights dot xi)
+		  val unregG = (xi*(mu-outputs(order(i))))
+		  //debug.println(xi.data+" "+mu+" " +outputs(order(i))+ " " +g)
+		//  println("mu: "+mu+" g_"+i+": "+g)
+		  weights = weights - unregG*stepSize
+		  weights = weights + (priorderiv(weights)/n)*stepSize //  clipSum(weights,(priorderiv(weights)/n)*stepSize)
+		  //debug.println(weights)
+		  i+=1
+	    }
+        val newLL = loglikelihood()
+        if ((newLL-oldLL).abs < threshold)
+        	notConverged = false
+        oldLL=newLL
+        j+=1
+    }
+    println("Logprob at end: "+oldLL)
+    //debug.close()
+  } 
   
   /**
    * perform MAP-inference using LBFGS
    */
   def mapLBFGS(start: DenseVector[Double]=weights,maxIters:Int=1000,m: Int=8) = {
+    println("Logprob at start: "+loglikelihood())
     val lbfgs = new breeze.optimize.LBFGS[DenseVector[Double]](maxIters,m)
     weights = lbfgs.minimize(gradient, start)
+    println("Logprob at end: "+loglikelihood())
   }
   
   def mhUpdate(burnIn:Int=100) = {

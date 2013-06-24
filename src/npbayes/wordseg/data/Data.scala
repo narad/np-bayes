@@ -75,7 +75,7 @@ class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*
 	
 	//logistic regressions
 	val (nFeatures,features) = nAndFeatures
-	val delModel1 = new LogisticRegression[(WordType,WordType)](nFeatures,features,logprior=LogisticRegression.l2prior(1))
+	val delModel1 = new LogisticRegression[(WordType,WordType)](nFeatures,features,logprior=LogisticRegression.l2prior(10000))
 	val delModel2 = new LogisticRegression[(WordType,WordType)](nFeatures,features)
 	
 	//data-structures
@@ -172,7 +172,8 @@ class Data(fName: String, val phonVar: Boolean = false,val MISSING1: String = "*
 	      println("featurized inputs for training")
 	      delModel1.setOutputs(outputs)
 		  println("optimize")
-		  delModel1.mapLBFGS()
+//		  delModel1.mapLBFGS()
+		  delModel1.stochasticDescent()
 	      //delModel1.mapNewtonsMethod()
 //		  println("end update ("+delModel1.weights+")")	      
 	  }

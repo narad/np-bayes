@@ -50,6 +50,10 @@ object PhonemeFeatureMap {
   
   def apply(phone: Int) = pmap(phone)
   
+  def hasFeature(phone: BitSet, f: String): Double = {
+    if (phone(fmapStoN(f))) 1.0 else 0.0
+  }
+  
   def init(fName: String) = {
     if (isInit)
       throw new Error("Can only initialize the PhonemeFeatureMap once.")

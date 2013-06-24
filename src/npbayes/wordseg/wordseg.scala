@@ -136,6 +136,7 @@ object wordseg {
 	  case "coetzee" => Features.featuresCoetzee
 	  case "large" => Features.featuresLarge2
 	  case "largeNext" => Features.featuresLargeNext
+	  case "manual" => Features.featuresManual
 	}
 	hsampleiters = options.HSAMPLEITERS
 	hsample = options.HSAMPLE
@@ -189,7 +190,7 @@ object wordseg {
 	  
 	  def sample = options.MODE match {
 	    case "WORDSEG" =>
-	      model.gibbsSweep(_)
+	      model.gibbsSweep(_) 
 	    case "LANGMODEL" =>
 	      model.gibbsSweepWords(_)
 	  }
@@ -228,7 +229,7 @@ object wordseg {
 	    		 
 	  println(log); traceFile.println(log)
 	  if (phonVar)
-	    weightFile.println(Features.featureLargeName2.mkString(" "))
+	    weightFile.println(Features.featureManualName.mkString(" "))
 	    	  
 	  for (i <- 1 to options.ITERS) {
 	    val temperature: Double = annealTemperature(i)
