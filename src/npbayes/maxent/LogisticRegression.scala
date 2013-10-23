@@ -149,7 +149,7 @@ class LogisticRegression[Input](nfeatures: Int,val features: Input => Array[Doub
   /**
    * with clipping, as described in Bob Carpenter's notes
    */
-  def stochasticDescent(iters: Int=500,threshold: Double = 1e-4) = {
+  def stochasticDescent(iters: Int=50,threshold: Double = 1e-4) = {
     var j = 1
 
     val n: Double = outputs.size

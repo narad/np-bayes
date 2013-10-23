@@ -431,7 +431,7 @@ class Unigram(val corpusName: String, val features: (Int,((WordType,WordType))=>
 	      0 
 	  if (npbayes.wordseg.DEBUG)
 		  assert(pypUni.sanityCheck)
-	  System.err.println("lp1a: "+ lp1a + " lp1b: "+lp1b+ " lp2: "+ lp2+ " lp3: "+lp3+" boundaries: "+ lpBoundaries)		  
+//	  System.err.println("lp1a: "+ lp1a + " lp1b: "+lp1b+ " lp2: "+ lp2+ " lp3: "+lp3+" boundaries: "+ lpBoundaries)		  
 	  lp1a+lp1b + lp2 + lp3+lpBoundaries
 	  //lp1a+lp3
 	} 

@@ -169,7 +169,9 @@ object LogisticRegression {
 
   val zero = l.weights                            //> zero  : breeze.linalg.DenseVector[Double] = DenseVector(0.0, 0.0, 0.0, 0.0,
                                                   //|  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-  npbayes.Utils.time(l.mapLBFGS(zero))            //> time: 1058.401074ms
+  npbayes.Utils.time(l.mapLBFGS(zero))            //> Logprob at start: -28224.953192376288
+                                                  //| Logprob at end: -20617.83357911706
+                                                  //| time: 1453.110746ms
   l.loglikelihood(l.weights)                      // > res0: Double = -23507.988141605063
                                                   //> res0: Double = -20617.83357911706
   l.weights                                       //> res1: breeze.linalg.DenseVector[Double] = DenseVector(0.6477144065601169, -
@@ -178,7 +180,7 @@ object LogisticRegression {
                                                   //| 034183525747, 0.35170229380058654, 0.16430401213752738, -0.0773112076520320
                                                   //| 6, -1.247290859319128)
   
-  npbayes.Utils.time(l.mapGradientDescent(zero))  //> time: 1417.700217ms
+  npbayes.Utils.time(l.mapGradientDescent(zero))  //> time: 1656.146133ms
   l.loglikelihood()                               //> res2: Double = -20617.738781665266
   l.weights                                       //> res3: breeze.linalg.DenseVector[Double] = DenseVector(0.657028389355999, -1
                                                   //| .2204176008049221, -1.2735649263109097, 0.597398332286427, -0.3849121263976
@@ -186,7 +188,7 @@ object LogisticRegression {
                                                   //| 942301465581, 0.34912870919388367, 0.1589786507027115, -0.03716730523419123
                                                   //| 4, -1.2481642048540902)
 
-  npbayes.Utils.time(l.mapNewtonsMethod(zero))    //> time: 1702.047392ms
+  npbayes.Utils.time(l.mapNewtonsMethod(zero))    //> time: 1791.389214ms
   l.loglikelihood()                               //> res4: Double = -20617.47170420163
   l.weights                                       //> res5: breeze.linalg.DenseVector[Double] = DenseVector(0.6290058550989026, -
                                                   //| 1.247551356490247, -1.3204245029175297, 0.5693310655256005, -0.413358468981
@@ -194,12 +196,14 @@ object LogisticRegression {
                                                   //| 9812191647439, 0.37702092661009917, 0.1869404692303347, -0.0227001208046081
                                                   //| 62, -1.2208144263127656)
   l.weights = zero
-  npbayes.Utils.time(l.stochasticDescent())       //> Logprob at start: -28224.953192376288
-                                                  //| time: 855.119376ms
-  l.loglikelihood()                               //> res6: Double = -20689.930694907867
-  l.weights                                       //> res7: breeze.linalg.DenseVector[Double] = DenseVector(0.5537264906257487, -
-                                                  //| 1.1822595243544463, -1.4896571398236533, 0.5430994377758659, -0.36867609996
-                                                  //| 46997, 0.3535352723574795, -0.06922880447597181, -0.5698736292397152, -0.14
-                                                  //| 68941962241085, 0.4064434768481888, 0.10043485332255188, -0.078895276439980
-                                                  //| 58, -1.2322179871747345)
+  npbayes.Utils.time(l.stochasticDescent(iters=1000))
+                                                  //> Logprob at start: -28224.953192376288
+                                                  //| Logprob at end: -20618.162003142945
+                                                  //| time: 72631.59978ms
+  l.loglikelihood()                               //> res6: Double = -20618.162003142945
+  l.weights                                       //> res7: breeze.linalg.DenseVector[Double] = DenseVector(0.640048413311838, -1
+                                                  //| .2606284926005908, -1.2916039379501192, 0.5751165682338464, -0.405334047400
+                                                  //| 39874, 0.39512871415411466, -0.23569805268973207, -0.5329941379601673, 0.12
+                                                  //| 610169674084945, 0.36787870666159456, 0.18214021940798863, -0.0261398172514
+                                                  //| 13382, -1.228561397160774)
 }
